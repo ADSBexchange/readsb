@@ -2314,11 +2314,9 @@ int traceAdd(struct aircraft *a, struct modesMessage *mm, int64_t now, int stale
         max_speed_diff *= 2;
     }
 
-    if (Modes.json_trace_interval > 5 * SECONDS) {
-        if (a->pos_reliable_valid.source == SOURCE_MLAT) {
-            min_elapsed = 1500;
-            max_elapsed /= 2;
-        }
+    if (max_elapsed > 5 * SECONDS && a->pos_reliable_valid.source == SOURCE_MLAT) {
+        min_elapsed = 1500;
+        max_elapsed = imax(max_elapsed / 2, 5 * SECONDS);
     }
     // some towers on MLAT .... create unnecessary data
     // only reduce data produced for configurations with trace interval more than 5 seconds, others migh want EVERY DOT :)
@@ -2345,6 +2343,10 @@ int traceAdd(struct aircraft *a, struct modesMessage *mm, int64_t now, int stale
                 track = -1;
             }
         }
+    }
+
+    if (max_elapsed > 5 * SECONDS && a->pos_reliable_valid.source != SOURCE_MLAT && track == -1) {
+            max_elapsed = imax(max_elapsed / 4, 5 * SECONDS);
     }
 
     if (a->trace_current_len == 0)

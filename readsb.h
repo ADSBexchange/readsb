@@ -673,9 +673,11 @@ struct _Modes
     int8_t debug_gps;
     int8_t debug_planefinder;
     int8_t debug_zstd;
+    int8_t legacy_history;
     int8_t enable_zstd;
     int8_t incrementId;
     int8_t omitGlobeFiles;
+    int8_t tar1090_no_globe;
     int8_t enableAcasCsv;
     int8_t enableAcasJson;
     int8_t dump_accept_synthetic_now;
@@ -728,6 +730,7 @@ struct _Modes
     uint64_t receiver_focus;
 
     uint32_t preambleThreshold;
+    uint32_t net_forward_min_messages;
     int net_output_flush_size; // Minimum Size of output data
     int32_t net_output_beast_reduce_interval; // Position update interval for data reduction
     int32_t ping_reduce;

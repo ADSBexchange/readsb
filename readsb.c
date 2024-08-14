@@ -571,7 +571,7 @@ static void *jsonEntryPoint(void *arg) {
             }
             writeJsonToFile(Modes.json_dir, "aircraft.json", cb);
 
-            if ((ALL_JSON) && Modes.onlyBin < 2 && now >= next_history) {
+            if ((Modes.legacy_history || ((ALL_JSON) && Modes.onlyBin < 2)) && now >= next_history) {
                 char filebuf[PATH_MAX];
 
                 snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
@@ -1896,6 +1896,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                         Modes.apiThreadCount = atoi(token[1]);
                     }
                 }
+                if (strcasecmp(token[0], "legacy_history") == 0) {
+                    Modes.legacy_history = 1;
+                }
                 if (strcasecmp(token[0], "beast_forward_noforward") == 0) {
                     Modes.beast_forward_noforward = 1;
                 }
@@ -1932,6 +1935,10 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 if (strcasecmp(token[0], "messageRateMult") == 0 && token[1]) {
                     Modes.messageRateMult = atof(token[1]);
                 }
+                if (strcasecmp(token[0], "forwardMinMessages") == 0 && token[1]) {
+                    Modes.net_forward_min_messages = atoi(token[1]);
+                    fprintf(stderr, "forwardMinMessages: %u\n", Modes.net_forward_min_messages);
+                }
                 if (strcasecmp(token[0], "incrementId") == 0) {
                     Modes.incrementId = 1;
                 }
@@ -1952,6 +1959,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 }
                 if (strcasecmp(token[0], "enableConnsJson") == 0) {
                     Modes.enableConnsJson = 1;
+                }
+                if (strcasecmp(token[0], "tar1090NoGlobe") == 0) {
+                    Modes.tar1090_no_globe = 1;
                 }
                 if (strcasecmp(token[0], "provokeSegfault") == 0) {
                     Modes.debug_provoke_segfault = 1;
@@ -2238,11 +2248,13 @@ static void configAfterParse() {
     cpu_set_t mask;
     if (sched_getaffinity(getpid(), sizeof(mask), &mask) == 0) {
         Modes.num_procs = CPU_COUNT(&mask);
+#if (defined(__arm__))
         if (Modes.num_procs < 2 && !Modes.preambleThreshold && Modes.sdr_type != SDR_NONE) {
             fprintf(stderr, "WARNING: Reducing preamble threshold / decoding performance as this system has only 1 core (explicitely set --preamble-threshold to disable this behaviour)!\n");
             Modes.preambleThreshold = PREAMBLE_THRESHOLD_PIZERO;
             Modes.fixDF = 0;
         }
+#endif
     }
     if (Modes.num_procs < 1) {
         Modes.num_procs = 1; // sanity check
@@ -2795,7 +2807,7 @@ int main(int argc, char **argv) {
     if (Modes.json_dir) {
         threadCreate(&Threads.json, NULL, jsonEntryPoint, NULL);
 
-        if (Modes.json_globe_index && !Modes.omitGlobeFiles) {
+        if (Modes.json_globe_index && !Modes.omitGlobeFiles && !Modes.tar1090_no_globe) {
             // globe_xxxx.json
             threadCreate(&Threads.globeJson, NULL, globeJsonEntryPoint, NULL);
         }
@@ -2875,12 +2887,12 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "<3>FATAL: priorityTasksRun() interval %.1f seconds! Trying for an orderly shutdown as well as possible!\n", (double) elapsed1 / SECONDS);
                 fprintf(stderr, "<3>lockThreads() probably hung on %s\n", Modes.currentTask);
                 setExit(2);
-                break;
+                // don't break here, otherwise exitNowEventfd isn't signaled and we don't have a proper exit
+                // setExit signals exitSoonEventfd, the main loop will then signal exitNowEventfd
             }
             if (elapsed2 > 60 * SECONDS && !Modes.synthetic_now) {
                 fprintf(stderr, "<3>FATAL: removeStale() interval %.1f seconds! Trying for an orderly shutdown as well as possible!\n", (double) elapsed2 / SECONDS);
                 setExit(2);
-                break;
             }
         }
     }

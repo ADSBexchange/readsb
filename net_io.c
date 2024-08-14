@@ -422,6 +422,20 @@ static int sendUUID(struct client *c, int64_t now) {
     return -1;
 }
 
+static int suppressConnectError(struct net_connector *con) {
+    con->fail_counter += 1; // increment fail counter
+    if (con->silent_fail) {
+        return 1;
+    }
+    if (con->fail_counter < 9 || Modes.debug_net) {
+        return 0;
+    }
+    if (con->fail_counter == 10 || con->fail_counter % 200 == 0) {
+        fprintf(stderr, "%s: Connection to %s port %s failed %u times, suppressing most error messages until connection succeeds\n",
+                con->service->descr, con->address, con->port, con->fail_counter);
+    }
+    return 1;
+}
 
 static void checkServiceConnected(struct net_connector *con, int64_t now) {
 
@@ -447,9 +461,10 @@ static void checkServiceConnected(struct net_connector *con, int64_t now) {
 
     if (optval != 0) {
         // only 0 means "connection ok"
-        if (!con->silent_fail) {
-            fprintf(stderr, "%s: Connection to %s%s port %s failed: %d (%s)\n",
-                    con->service->descr, con->address, con->resolved_addr, con->port, optval, strerror(optval));
+
+        if (!suppressConnectError(con)) {
+            fprintf(stderr, "%s: Connection to %s%s port %s failed (%u): %d (%s)\n",
+                    con->service->descr, con->address, con->resolved_addr, con->port, con->fail_counter, optval, strerror(optval));
         }
         con->connecting = 0;
         anetCloseSocket(con->fd);
@@ -504,6 +519,7 @@ static void checkServiceConnected(struct net_connector *con, int64_t now) {
         }
     }
 
+    con->fail_counter = 0; // reset fail counter on successful connection
 }
 
 // Initiate an outgoing connection.
@@ -599,7 +615,7 @@ static void serviceConnect(struct net_connector *con, int64_t now) {
 
     if (Modes.debug_net) {
         //fprintf(stderr, "%s: Attempting connection to %s port %s ... (gonna set SNDBUF %d RCVBUF %d)\n", con->service->descr, con->address, con->port, getSNDBUF(con->service), getRCVBUF(con->service));
-        fprintf(stderr, "%s: Attempting connection to %s port %s ...\n", con->service->descr, con->address, con->port);
+        fprintf(stderr, "%s: Attempting connection to %s%s port %s ...\n", con->service->descr, con->address, con->resolved_addr, con->port);
     }
 
     if (!con->try_addr->ai_next) {
@@ -617,8 +633,10 @@ static void serviceConnect(struct net_connector *con, int64_t now) {
     fd = anetCreateSocket(Modes.aneterr, ai->ai_family, SOCK_NONBLOCK);
 
     if (fd == ANET_ERR) {
-        fprintf(stderr, "%s: Connection to %s%s port %s failed: %s\n",
-                con->service->descr, con->address, con->resolved_addr, con->port, Modes.aneterr);
+        if (!suppressConnectError(con)) {
+            fprintf(stderr, "%s: Connection to %s%s port %s failed: %s\n",
+                    con->service->descr, con->address, con->resolved_addr, con->port, Modes.aneterr);
+        }
         return;
     }
 
@@ -654,8 +672,10 @@ static void serviceConnect(struct net_connector *con, int64_t now) {
         epoll_ctl(Modes.net_epfd, EPOLL_CTL_DEL, con->fd, &con->dummyClient.epollEvent);
         con->connecting = 0;
         anetCloseSocket(con->fd);
-        fprintf(stderr, "%s: Connection to %s%s port %s failed: %s\n",
-                con->service->descr, con->address, con->resolved_addr, con->port, strerror(errno));
+        if (!suppressConnectError(con)) {
+            fprintf(stderr, "%s: Connection to %s%s port %s failed: %s\n",
+                    con->service->descr, con->address, con->resolved_addr, con->port, strerror(errno));
+        }
     }
 }
 
@@ -672,7 +692,7 @@ static void serviceReconnectCallback(int64_t now) {
         if (!con->connected) {
             // If we've exceeded our connect timeout, close connection.
             if (con->connecting && now >= con->connect_timeout) {
-                if (!con->silent_fail) {
+                if (!suppressConnectError(con)) {
                     fprintf(stderr, "%s: Connection to %s%s port %s timed out.\n",
                             con->service->descr, con->address, con->resolved_addr, con->port);
                 }
@@ -681,7 +701,9 @@ static void serviceReconnectCallback(int64_t now) {
                 epoll_ctl(Modes.net_epfd, EPOLL_CTL_DEL, con->fd, &con->dummyClient.epollEvent);
                 anetCloseSocket(con->fd);
             }
-            if (!con->connecting && (con->next_reconnect <= now || Modes.synthetic_now)) {
+
+            //fprintf(stderr, "next_reconnect in: %lld\n", (long long) (con->next_reconnect - now));
+            if (!con->connecting && (now >= con->next_reconnect || Modes.synthetic_now)) {
                 serviceConnect(con, now);
             }
         } else {
@@ -859,7 +881,7 @@ void modesInitNet(void) {
         exit(1);
     }
 
-    Modes.net_connector_delay_min = imax(100, Modes.net_connector_delay / 64);
+    Modes.net_connector_delay_min = imax(50, Modes.net_connector_delay / 64);
     Modes.last_connector_fail = Modes.next_reconnect_callback = mstime();
 
     if (!Modes.net)
@@ -1205,7 +1227,7 @@ static void modesCloseClient(struct client *c) {
         // if we were connected for some time, an immediate reconnect is expected
         con->next_reconnect = con->lastConnect + con->backoff;
 
-        Modes.next_reconnect_callback = now;
+        Modes.next_reconnect_callback = imin(Modes.next_reconnect_callback, con->next_reconnect + 1);
         Modes.last_connector_fail = now;
     }
 
@@ -3605,9 +3627,9 @@ static int handle_gpsd(struct client *c, char *p, int remote, int64_t now, struc
     } while (*d++);
 
     // filter all messages but TPV type
-    if (0 && !strstr(p, "\"class\":\"TPV\"")) {
+    if (!strstr(p, "\"class\":\"TPV\"")) {
         if (Modes.debug_gps) {
-            fprintf(stderr, "gpsdebug: class \"TPV\" : ignoring message.\n");
+            fprintf(stderr, "gpsdebug: class is not \"TPV\" : ignoring message.\n");
         }
         goto exit;
     }
@@ -5765,22 +5787,28 @@ static void outputMessage(struct modesMessage *mm) {
     if (Modes.filterDF && (mm->sbs_in || !(Modes.filterDFbitset & (1 << mm->msgtype)))) {
         return;
     }
+    if (!Modes.net) {
+        return;
+    }
+
+    struct aircraft *ac = mm->aircraft;
+
+    if (ac && ac->messages < Modes.net_forward_min_messages) {
+        return;
+    }
+
     int noforward = (mm->timestamp == MAGIC_NOFORWARD_TIMESTAMP) && !Modes.beast_forward_noforward;
     int64_t orig_ts = mm->timestamp;
     if (Modes.beast_set_noforward_timestamp) {
         mm->timestamp = MAGIC_NOFORWARD_TIMESTAMP;
     }
 
-    struct aircraft *ac = mm->aircraft;
-
     // Suppress the first message when using an SDR
     // messages with crc 0 have an explicit checksum and are more reliable, don't suppress them when there was no CRC fix performed
-    if (Modes.net && !mm->sbs_in && (Modes.net_only || Modes.net_verbatim || (mm->crc == 0 && mm->correctedbits == 0) || (ac && ac->messages > 1) || mm->msgtype == DFTYPE_MODEAC)) {
+    if (!mm->sbs_in
+            && (Modes.net_only || Modes.net_verbatim || (mm->crc == 0 && mm->correctedbits == 0) || (ac && ac->messages > 1) || mm->msgtype == DFTYPE_MODEAC)
+       ) {
         int is_mlat = (mm->source == SOURCE_MLAT);
-
-        if (mm->jsonPositionOutputEmit && Modes.json_out.connections) {
-            jsonPositionOutput(mm, ac);
-        }
 
         if (Modes.garbage_ports && (mm->garbage || mm->pos_bad) && !mm->pos_old && Modes.garbage_out.connections) {
             modesSendBeastOutput(mm, &Modes.garbage_out);
@@ -5819,7 +5847,11 @@ static void outputMessage(struct modesMessage *mm) {
         }
     }
 
-    if (mm->sbs_in && Modes.net && ac) {
+    if (mm->jsonPositionOutputEmit && Modes.json_out.connections) {
+        jsonPositionOutput(mm, ac);
+    }
+
+    if (mm->sbs_in && ac) {
         if (mm->reduce_forward || !Modes.sbsReduce) {
             if (Modes.sbs_out.connections) {
                 modesSendSBSOutput(mm, ac, &Modes.sbs_out);
