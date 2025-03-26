@@ -16,7 +16,7 @@ CFLAGS = $(DIALECT) -W -D_GNU_SOURCE -D_DEFAULT_SOURCE -Wall -Werror -fno-common
 CFLAGS += -DMODES_READSB_VERSION=\"$(READSB_VERSION)\"
 CFLAGS += -Wdate-time -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wformat -Werror=format-security
 
-LIBS = -pthread -lpthread -lm -lrt -lzstd
+LIBS = -pthread -lpthread -lm -lrt -lzstd -lncurses
 
 ifeq ($(ZLIB_STATIC), yes)
 	LIBS += -l:libz.a
