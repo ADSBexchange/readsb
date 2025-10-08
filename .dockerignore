@@ -1,0 +1,11 @@
+# Keep .git so --version shows the commit. If you don't want that, uncomment the next line.
+# .git/
+
+**/.DS_Store
+**/.idea
+**/.vscode
+**/*.swp
+/out
+/build
+dist
+tmp
