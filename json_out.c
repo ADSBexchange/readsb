@@ -638,7 +638,7 @@ char *sprintAircraftObject(char *p, char *end, struct aircraft *a, int64_t now, 
     if (printMode == 2)
         p = safe_snprintf(p, end, "\"now\" : %.3f,", now / 1000.0);
     if (printMode != 1)
-        p = safe_snprintf(p, end, "\"hex\":\"%s%06x\",", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        p = safe_snprintf(p, end, "\"hex\":\"%s%06x\",", (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
     p = safe_snprintf(p, end, "\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
     if (trackDataValid(&a->callsign_valid)) {
         char buf[128];
@@ -855,7 +855,7 @@ char *sprintAircraftRecent(char *p, char *end, struct aircraft *a, int64_t now, 
 
     p = safe_snprintf(p, end, "{");
     //p = safe_snprintf(p, end, "\"now\" : %.0f,", now / 1000.0);
-    p = safe_snprintf(p, end, "\"hex\":\"%s%06x\",", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    p = safe_snprintf(p, end, "\"hex\":\"%s%06x\",", (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
     p = safe_snprintf(p, end, "\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
 
     char *startRecent = p;
@@ -1755,7 +1755,7 @@ struct char_buffer generateTraceJson(struct aircraft *a, traceBuffer tb, int sta
     char *p = buf;
     char *end = buf + alloc;
 
-    p = safe_snprintf(p, end, "{\"icao\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    p = safe_snprintf(p, end, "{\"icao\":\"%s%06x\"", (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
 
     if (Modes.db) {
         char *regInfo = p;
@@ -2113,7 +2113,7 @@ struct char_buffer generateVRS(int part, int n_parts, int reduced_data) {
             else
                 *p++ = ',';
 
-            p = safe_snprintf(p, end, "{\"Icao\":\"%s%06X\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            p = safe_snprintf(p, end, "{\"Icao\":\"%s%06X\"", (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
 
 
             if (trackDataValid(&a->pos_reliable_valid)) {

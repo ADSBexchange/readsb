@@ -47,6 +47,9 @@ static inline const char *addrtype_enum_string(addrtype_t type) {
         case ADDR_MODE_A:
             return "mode_ac";
 
+        case ADDR_UAV:
+            return "adsb_other";
+
         default:
             return "unknown";
     }

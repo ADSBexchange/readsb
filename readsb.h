@@ -194,6 +194,8 @@ typedef enum
 
     ADDR_MODE_A = 12, /* Mode A */
 
+    ADDR_UAV = 13,           /* UAV/drone address with $ prefix */
+
     ADDR_UNKNOWN = 15/* unknown address format */
 } addrtype_t;
 
