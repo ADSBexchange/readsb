@@ -687,7 +687,9 @@ void dbPut(uint32_t addr, dbEntry **index, dbEntry *d) {
 }
 
 void updateTypeReg(struct aircraft *a) {
-    dbEntry *d = dbGet(a->addr, Modes.dbIndex);
+    // Mask out MODES_NON_ICAO_ADDRESS flag for database lookup (UAVs have $ prefix which sets this flag)
+    uint32_t lookup_addr = a->addr & 0xFFFFFF;
+    dbEntry *d = dbGet(lookup_addr, Modes.dbIndex);
     if (d) {
         memcpy(a->registration, d->registration, sizeof(a->registration));
         memcpy(a->typeCode, d->typeCode, sizeof(a->typeCode));

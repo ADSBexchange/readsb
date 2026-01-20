@@ -658,7 +658,9 @@ char *sprintAircraftObject(char *p, char *end, struct aircraft *a, int64_t now, 
             }
 
             if (Modes.jsonLongtype) {
-                dbEntry *e = dbGet(a->addr, Modes.dbIndex);
+                // Mask out MODES_NON_ICAO_ADDRESS flag for database lookup (UAVs have $ prefix which sets this flag)
+                uint32_t lookup_addr = a->addr & 0xFFFFFF;
+                dbEntry *e = dbGet(lookup_addr, Modes.dbIndex);
                 if (e) {
                     if (e->typeLong[0])
                         p = safe_snprintf(p, end, ",\"desc\":\"%.*s\"", (int) sizeof(e->typeLong), e->typeLong);
