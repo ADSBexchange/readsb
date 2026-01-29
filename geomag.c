@@ -475,7 +475,6 @@ static char geomag_introduction(double epochlowlim)
     char help;
     static char ans;
     int res = 0;
-    res++;
 
     printf("\n\n Welcome to the World Magnetic Model (WMM) %4.0lf C-Program\n\n", epochlowlim);
     printf("            --- Version 3.0, January 2010 ---\n\n");
@@ -484,6 +483,10 @@ static char geomag_introduction(double epochlowlim)
     printf("\n Enter h for help and contact information or c to continue.");
     printf ("\n >");
     res = scanf("%c%*[^\n]",&help);
+    if (res <= 0) {
+        // reading from stdin didn't work
+        exit(1);
+    }
     getchar();
 
     if ((help == 'h') || (help == 'H'))
@@ -567,7 +570,6 @@ void geomag_interactive() {
     double epochrange = 5.0;
     double dmin, imin, ddeg, ideg;
     int res = 0;
-    res++;
 
     char ans = geomag_introduction(epochlowlim);
     if ((ans == 'y') || (ans == 'Y'))
@@ -581,10 +583,16 @@ S1:
     warn_H_strong_val = 99999.0;
     warn_P = 0;
 
-    printf("\n\n\nENTER LATITUDE IN DECIMAL DEGREES ");
-    printf("\n(North latitude positive, South latitude negative \n");
-    printf("i.e. 25.5 for 25 degrees 30 minutes north.) \n");
-    res = scanf("%lf%*[^\n]", &dlat);
+    while (res <= 0 ) {
+        printf("\n\n\nENTER LATITUDE IN DECIMAL DEGREES ");
+        printf("\n(North latitude positive, South latitude negative \n");
+        printf("i.e. 25.5 for 25 degrees 30 minutes north.) \n");
+        res = scanf("%lf%*[^\n]", &dlat);
+        if (res <= 0) {
+            printf("Invalid input. Please try again.");
+        }
+    }
+
     getchar();
 
     printf("ENTER LONGITUDE IN DECIMAL DEGREES");
