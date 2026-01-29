@@ -1114,7 +1114,6 @@ static void mark_legs(traceBuffer tb, struct aircraft *a, int start, int recent)
     int64_t last_high = 0;
     int64_t last_low = 0;
 
-    int last_high_index = 0;
     int last_low_index = 0;
 
     int64_t last_airborne = 0;
@@ -1125,7 +1124,6 @@ static void mark_legs(traceBuffer tb, struct aircraft *a, int start, int recent)
 
     int last_5min_gap_index = -1;
     struct state last_5min_gap_state = { 0 };
-    int last_10min_gap_index = -1;
 
     int was_ground = 0;
 
@@ -1166,10 +1164,6 @@ static void mark_legs(traceBuffer tb, struct aircraft *a, int start, int recent)
             last_5min_gap_state = *state;
             if (focus) {
                 fprintf(stderr, "5 min gap detected with index %d\n", state_index);
-            }
-            if (elapsed > 10 * MINUTES) {
-                last_10min_gap_index++; // shut up unused var
-                last_10min_gap_index = state_index;
             }
         }
 
@@ -1231,7 +1225,6 @@ static void mark_legs(traceBuffer tb, struct aircraft *a, int start, int recent)
             // fake major_climb after takeoff ... bit hacky
             high = low + threshold + 1;
             last_high = state->timestamp;
-            last_high_index = index;
             last_low = last_ground;
             last_low_index = last_ground_index;
         }
@@ -1245,8 +1238,6 @@ static void mark_legs(traceBuffer tb, struct aircraft *a, int start, int recent)
         }
         if (abs(high - altitude) < threshold * 1 / 3) {
             last_high = state->timestamp;
-            last_high_index++;
-            last_high_index = index;
             if (0 && focus) {
                 time_t nowish = state->timestamp/1000;
                 struct tm utc;
