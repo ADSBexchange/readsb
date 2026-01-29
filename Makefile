@@ -133,6 +133,8 @@ endif
 # add custom overrides if user defines them
 CFLAGS += -g $(OPTIMIZE)
 
+.PHONY: clean test cprtest crctest
+
 all: readsb viewadsb
 
 ifneq ($(shell cat .version 2>/dev/null),prefix $(READSB_VERSION))
@@ -164,11 +166,16 @@ viewadsb: readsb
 clean:
 	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests convert_benchmark
 
+test: cprtest crctest
+
 cprtest: cprtests
 	./cprtests
 
 cprtests: cpr.o cprtests.o
 	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+crctest: crctests
+	./crctests 1 1
 
 crctests: crc.c crc.h
 	$(CC) $(CFLAGS) -DCRCDEBUG -o $@ $<
