@@ -38,6 +38,7 @@ struct receiver *receiverGet(uint64_t id);
 struct receiver *receiverCreate(uint64_t id);
 
 struct char_buffer generateReceiversJson();
+struct char_buffer generateHexReceiversJson();
 
 int receiverPositionReceived(struct aircraft *a, struct modesMessage *mm, double lat, double lon, int64_t now);
 void receiverTimeout(int part, int nParts, int64_t now);

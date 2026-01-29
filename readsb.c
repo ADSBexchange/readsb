@@ -2561,8 +2561,10 @@ static void miscStuff(int64_t now) {
         }
         if (Modes.netIngest)
             free(writeJsonToFile(Modes.json_dir, "clients.json", generateClientsJson()).buffer);
-        if (Modes.netReceiverIdJson)
+        if (Modes.netReceiverIdJson) {
             free(writeJsonToFile(Modes.json_dir, "receivers.json", generateReceiversJson()).buffer);
+            free(writeJsonToFile(Modes.json_dir, "hex_receivers.json", generateHexReceiversJson()).buffer);
+        }
 
         return;
     }

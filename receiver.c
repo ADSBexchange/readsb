@@ -407,3 +407,73 @@ struct char_buffer generateReceiversJson() {
     cb.buffer = buf;
     return cb;
 }
+
+struct char_buffer generateHexReceiversJson(void) {
+    struct char_buffer cb;
+    int64_t now = mstime();
+
+    size_t buflen = 4*1024*1024;
+    char *buf = (char *) cmalloc(buflen), *p = buf, *end = buf + buflen;
+
+    p = safe_snprintf(p, end, "{ \"now\" : %.1f,\n", now / 1000.0);
+    p = safe_snprintf(p, end, " \"hex_receivers\" : [\n");
+
+    struct craftArray *ca = &Modes.aircraftActive;
+    ca_lock_read(ca);
+
+    for (int i = 0; i < ca->len; i++) {
+        struct aircraft *a = ca->list[i];
+        if (!a) continue;
+
+        if ((p + 500) >= end) {
+            size_t used = p - buf;
+            buflen *= 2;
+            buf = (char *) realloc(buf, buflen);
+            p = buf + used;
+            end = buf + buflen;
+        }
+
+        char uuid[32];
+        sprint_uuid1(a->receiverId, uuid);
+
+        p = safe_snprintf(p, end, "  { \"hex\": \"%06x\", \"receivers\": [\"%s\"",
+            a->addr & 0xFFFFFF, uuid);
+
+#if defined(PRINT_UUIDS)
+        /* Track seen receiver IDs to avoid duplicates */
+        uint64_t seenIds[RECENT_RECEIVER_IDS + 1];
+        int seenCount = 1;
+        seenIds[0] = a->receiverId;
+
+        for (int j = 0; j < RECENT_RECEIVER_IDS; j++) {
+            if (a->recentReceiverIds[j].id &&
+                a->recentReceiverIds[j].time > now - 60*SECONDS) {
+                int isDuplicate = 0;
+                for (int k = 0; k < seenCount; k++) {
+                    if (seenIds[k] == a->recentReceiverIds[j].id) {
+                        isDuplicate = 1;
+                        break;
+                    }
+                }
+                if (!isDuplicate) {
+                    seenIds[seenCount++] = a->recentReceiverIds[j].id;
+                    sprint_uuid1(a->recentReceiverIds[j].id, uuid);
+                    p = safe_snprintf(p, end, ",\"%s\"", uuid);
+                }
+            }
+        }
+#endif
+        p = safe_snprintf(p, end, "] },\n");
+    }
+
+    ca_unlock_read(ca);
+
+    if (p > buf + 2 && *(p-2) == ',')
+        *(p-2) = ' ';
+
+    p = safe_snprintf(p, end, " ]\n}\n");
+
+    cb.len = p - buf;
+    cb.buffer = buf;
+    return cb;
+}
