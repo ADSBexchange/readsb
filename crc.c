@@ -24,6 +24,13 @@
 #include "readsb.h"
 #include <assert.h>
 
+#ifdef CRCDEBUG
+void setExit(int) {
+    return;
+}
+#endif
+
+
 // Errorinfo for "no errors"
 static struct errorinfo NO_ERRORS;
 
