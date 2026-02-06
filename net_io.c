@@ -3240,7 +3240,9 @@ static void modesSendSBSOutput(struct modesMessage *mm, struct aircraft *a, stru
     }
 
     // Fields 1 to 6 : SBS message type and ICAO address of the aircraft and some other stuff
-    p += sprintf(p, "MSG,%d,1,1,%06X,1,", msgType, mm->addr);
+    p += sprintf(p, "MSG,%d,1,1,%s%06X,1,", msgType,
+            (a->addrtype == ADDR_UAV) ? "$" : "",
+            mm->addr & 0xFFFFFF);
 
     // Find current system time
     clock_gettime(CLOCK_REALTIME, &now);
