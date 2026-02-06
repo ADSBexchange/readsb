@@ -1,5 +1,5 @@
 PROGNAME=readsb
-READSB_VERSION := "$(shell cat version) UAV-support"
+READSB_VERSION := "$(shell echo -n `cat version`; { git show -s --format=format: && echo -n ' adsbexchange git: ' && git describe --abbrev --dirty --always && git show -s --format=format:"(committed: %cd)" | tr -cd '[a-z],[A-Z],[0-9],:, ,\-,_,(,)';} || echo -n ' compiled on '`date +%y%m%d` )"
 
 RTLSDR ?= no
 BLADERF ?= no
