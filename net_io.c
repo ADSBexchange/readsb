@@ -3181,8 +3181,8 @@ static void modesSendSBSOutput(struct modesMessage *mm, struct aircraft *a, stru
     struct tm stTime_receive, stTime_now;
     int msgType;
 
-    // For now, suppress non-ICAO addresses
-    if (mm->addr & MODES_NON_ICAO_ADDRESS)
+    // Suppress non-ICAO addresses, except UAVs
+    if ((mm->addr & MODES_NON_ICAO_ADDRESS) && a->addrtype != ADDR_UAV)
         return;
 
     p = prepareWrite(writer, 200);
