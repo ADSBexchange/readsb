@@ -59,6 +59,7 @@ static struct argp_option optionsReadsb[] = {
     {"interactive-ttl", OptInteractiveTTL, "<sec>", 0, "Remove from list if idle for <sec> (default: 60)", 1},
     {"modeac", OptModeAc, 0, 0, "Enable decoding of SSR Modes 3/A & 3/C", 1},
     {"modeac-auto", OptModeAcAuto, 0, 0, "Enable Mode A/C if requested by a Beast connection", 1},
+    {"enable-uav", OptEnableUav, 0, 0, "Enable processing of UAV/drone data ($ prefix in SBS input)", 1},
     {"max-range", OptMaxRange, "<dist>", 0, "Absolute maximum range for position decoding (in nm, default: 300)", 1},
     {"fix", OptFix, 0, 0, "Enable CRC single-bit error correction (default)", 1},
     {"no-fix", OptNoFix, 0, 0, "Disable CRC single-bit error correction", 1},

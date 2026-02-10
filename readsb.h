@@ -640,6 +640,7 @@ struct _Modes
     int8_t raw; // Raw output format
     int8_t mode_ac; // Enable decoding of SSR Modes A & C
     int8_t mode_ac_auto; // allow toggling of A/C by Beast commands
+    int8_t enable_uav; // Enable processing of UAV/drone data
     int8_t debug_net;
     int8_t debug_flush;
     int8_t debug_no_discard;
@@ -1272,6 +1273,7 @@ enum {
     OptSoapyBandwith,
     OptSoapyEnableAgc,
     OptSoapyGainElement,
+    OptEnableUav,
 };
 
 

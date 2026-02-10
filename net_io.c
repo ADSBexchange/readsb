@@ -2994,7 +2994,7 @@ static int decodeSbsLine(struct client *c, char *line, int remote, int64_t now, 
     char *icao = t[5];
     
     // Check for $ prefix (UAV/drone identifier)
-    if (icao_len == 7 && icao[0] == '$') {
+    if (Modes.enable_uav && icao_len == 7 && icao[0] == '$') {
         is_uav = 1;
         icao = t[5] + 1;  // Skip $ prefix
         icao_len = 6;
