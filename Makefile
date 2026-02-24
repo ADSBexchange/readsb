@@ -162,7 +162,7 @@ viewadsb: readsb
 	cp readsb viewadsb
 
 clean:
-	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests convert_benchmark
+	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests convert_benchmark
 
 cprtest: cprtests
 	./cprtests
@@ -172,6 +172,12 @@ cprtests: cpr.o cprtests.o
 
 crctests: crc.c crc.h
 	$(CC) $(CFLAGS) -DCRCDEBUG -o $@ $<
+
+dbtests: dbtests.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+dbtest: dbtests
+	./dbtests
 
 benchmarks: convert_benchmark
 	./convert_benchmark
