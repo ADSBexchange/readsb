@@ -135,6 +135,8 @@ CFLAGS += -g $(OPTIMIZE)
 
 all: readsb viewadsb
 
+test: cprtest dbtest
+
 ifneq ($(shell cat .version 2>/dev/null),prefix $(READSB_VERSION))
 .PHONY: .version
 .version:
