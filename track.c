@@ -1885,12 +1885,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             goto exit;
         }
     }
-    
-    // Set category B6 for UAV as soon as we detect it (early in processing)
-    if (mm->addrtype == ADDR_UAV) {
-        a->category = 0xB6;
-        a->category_updated = now;
-    }
 
     struct aircraft scratch;
     bool haveScratch = false;
@@ -1973,12 +1967,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
         if (a->addrtype > ADDR_ADSB_ICAO_NT) {
             a->adsb_version = -1; // reset ADS-B version if a non ADS-B message type is received
-        }
-        
-        // Set category B6 when addrtype is set to ADDR_UAV
-        if (a->addrtype == ADDR_UAV) {
-            a->category = 0xB6;
-            a->category_updated = now;
         }
     }
 

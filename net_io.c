@@ -3017,7 +3017,7 @@ static int decodeSbsLine(struct client *c, char *line, int remote, int64_t now, 
     // Set UAV address type and non-ICAO flag if $ prefix was detected
     if (is_uav) {
         mm->addrtype = ADDR_UAV;
-        mm->addr |= MODES_NON_ICAO_ADDRESS;
+        mm->addr |= MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS;
         // Set category B6 (Unmanned Aerial Vehicle) for UAV
         mm->category = 0xB6;
         mm->category_valid = 1;

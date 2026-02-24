@@ -1186,7 +1186,11 @@ static struct char_buffer parseFetch(struct apiCon *con, struct char_buffer *req
                     }
                     uint32_t hex = (uint32_t) strtol(tok, &endptr, 16);
                     if (tok != endptr) {
-                        hex |= ((other || uav) ? MODES_NON_ICAO_ADDRESS : 0);
+                        if (uav) {
+                            hex |= MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS;
+                        } else if (other) {
+                            hex |= MODES_NON_ICAO_ADDRESS;
+                        }
                         hexList[hexCount] = hex;
                         hexCount++;
                         //fprintf(stderr, "%06x\n", hex);
