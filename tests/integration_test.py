@@ -299,15 +299,31 @@ class TestSbsToJson(unittest.TestCase):
             sbs_msg3("A60000", alt=5000, lat=51.2, lon=-0.3),
             sbs_msg6("A60000", squawk="4521"),
         ])
-        # Squawk requires tentative confirmation: same value seen
-        # after 750ms delay before it's accepted
-        time.sleep(1.0)
-        self._feed([sbs_msg6("A60000", squawk="4521")])
-        data = poll_aircraft_json(self.inst.tmpdir, want_hex="a60000")
-        self.assertIsNotNone(data, "aircraft.json never contained a60000")
-        ac = {a["hex"]: a for a in data["aircraft"]}
-        self.assertIn("a60000", ac)
-        self.assertEqual(ac["a60000"].get("squawk"), "4521")
+        # Squawk requires tentative confirmation: same value must be
+        # seen again after 750ms before it's accepted. Use generous
+        # delay for slow CI runners.
+        time.sleep(1.5)
+        self._feed([
+            sbs_msg6("A60000", squawk="4521"),
+            sbs_msg6("A60000", squawk="4521"),
+        ])
+        # Poll until squawk field actually appears (not just hex)
+        path = Path(self.inst.tmpdir) / "aircraft.json"
+        deadline = time.monotonic() + 8
+        squawk_val = None
+        while time.monotonic() < deadline:
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text())
+                    ac = {a["hex"]: a for a in data.get("aircraft", [])}
+                    if "a60000" in ac and "squawk" in ac["a60000"]:
+                        squawk_val = ac["a60000"]["squawk"]
+                        break
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            time.sleep(0.3)
+        self.assertEqual(squawk_val, "4521",
+                         f"Expected squawk '4521', got {squawk_val!r}")
 
 
 # ===================================================================
