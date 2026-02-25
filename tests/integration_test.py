@@ -226,6 +226,105 @@ def beast_frame(msg_bytes, timestamp=0, signal_level=0xA0):
 
 
 # ---------------------------------------------------------------------------
+# CPR encoding helpers for DF17 airborne position messages
+# ---------------------------------------------------------------------------
+
+import math
+
+def _nl(lat):
+    """Number of longitude zones at a given latitude (NL function)."""
+    if abs(lat) >= 87.0:
+        return 1
+    nz = 15
+    cos_lat = math.cos(math.radians(abs(lat)))
+    try:
+        return int(math.floor(
+            2.0 * math.pi / math.acos(
+                1.0 - (1.0 - math.cos(math.pi / (2.0 * nz))) / (cos_lat * cos_lat)
+            )
+        ))
+    except (ValueError, ZeroDivisionError):
+        return 1
+
+
+def _cpr_encode(lat, lon, odd):
+    """Encode lat/lon to 17-bit CPR values for airborne position.
+
+    Returns (cpr_lat, cpr_lon) as integers in [0, 2^17).
+    """
+    nz = 15
+    dlat = 360.0 / (4 * nz - odd)
+    # Normalize latitude into [0, dlat)
+    yz = int(math.floor(131072.0 * (lat % dlat) / dlat + 0.5)) & 0x1FFFF
+    nl = _nl(lat)
+    if odd:
+        nl = max(nl - 1, 1)
+    else:
+        nl = max(nl, 1)
+    dlon = 360.0 / nl
+    xz = int(math.floor(131072.0 * (lon % dlon) / dlon + 0.5)) & 0x1FFFF
+    return (yz, xz)
+
+
+def _encode_ac12(alt_ft):
+    """Encode altitude (feet) into the 12-bit AC12 field with Q-bit.
+
+    Uses 25-ft resolution (Q=1).  altitude = N * 25 - 1000.
+    """
+    n = (alt_ft + 1000) // 25
+    # 12-bit field: bits 11..5 = N[10..4], bit 4 = Q=1, bits 3..0 = N[3..0]
+    return ((n & 0x7F0) << 1) | 0x10 | (n & 0x0F)
+
+
+def make_df17_position(icao_hex, lat, lon, alt_ft, odd, typecode=11):
+    """Build a 14-byte DF17 airborne position message with valid CRC.
+
+    Encodes the given lat/lon/alt into CPR format.
+    *odd* selects CPR odd (1) or even (0) frame.
+    """
+    icao = int(icao_hex, 16)
+    msg = bytearray(14)
+    msg[0] = 0x8D  # DF17, CA=5
+    msg[1] = (icao >> 16) & 0xFF
+    msg[2] = (icao >> 8) & 0xFF
+    msg[3] = icao & 0xFF
+
+    # Build ME field (7 bytes = 56 bits):
+    # bits 1-5:  typecode
+    # bits 6-7:  surveillance status (00)
+    # bit  8:    NIC supplement-B (0)
+    # bits 9-20: altitude (12 bits)
+    # bit  21:   T flag (0)
+    # bit  22:   F flag (odd/even)
+    # bits 23-39: CPR latitude (17 bits)
+    # bits 40-56: CPR longitude (17 bits)
+    ac12 = _encode_ac12(alt_ft)
+    cpr_lat, cpr_lon = _cpr_encode(lat, lon, odd)
+
+    # Pack into 56-bit ME field
+    # bit positions within the 56-bit ME (1-indexed from MSB per ADS-B spec):
+    #   1-5:   typecode    → shift 51
+    #   6-7:   SS (0)      → shift 49
+    #   8:     NIC-B (0)   → shift 48
+    #   9-20:  AC12 (alt)  → shift 36
+    #   21:    T flag (0)  → shift 35
+    #   22:    F flag (odd) → shift 34
+    #   23-39: CPR lat     → shift 17
+    #   40-56: CPR lon     → shift 0
+    me_bits = (typecode << 51) | (ac12 << 36) | (odd << 34) | (cpr_lat << 17) | cpr_lon
+    for i in range(7):
+        msg[4 + i] = (me_bits >> (48 - 8 * i)) & 0xFF
+
+    # Compute CRC
+    msg[11] = msg[12] = msg[13] = 0
+    crc = modes_checksum(msg)
+    msg[11] = (crc >> 16) & 0xFF
+    msg[12] = (crc >> 8) & 0xFF
+    msg[13] = crc & 0xFF
+    return bytes(msg)
+
+
+# ---------------------------------------------------------------------------
 # ReadsbInstance — context manager
 # ---------------------------------------------------------------------------
 
@@ -233,7 +332,8 @@ class ReadsbInstance:
     """Start / stop a readsb process with unique ports and a temp directory."""
 
     def __init__(self, extra_args=None, beast_in=False, beast_out=False,
-                 raw_in=False, raw_out=False):
+                 raw_in=False, raw_out=False, vrs_out=False,
+                 json_out=False, beast_reduce=False):
         self.extra_args = extra_args or []
         self.proc = None
         self.tmpdir = None
@@ -244,6 +344,9 @@ class ReadsbInstance:
         self.beast_out_port = get_free_port() if beast_out else 0
         self.raw_in_port = get_free_port() if raw_in else 0
         self.raw_out_port = get_free_port() if raw_out else 0
+        self.vrs_out_port = get_free_port() if vrs_out else 0
+        self.json_out_port = get_free_port() if json_out else 0
+        self.beast_reduce_port = get_free_port() if beast_reduce else 0
         self._feeder = None
 
     def __enter__(self):
@@ -267,6 +370,14 @@ class ReadsbInstance:
             cmd += ["--net-ri-port", str(self.raw_in_port)]
         if self.raw_out_port:
             cmd += ["--net-ro-port", str(self.raw_out_port)]
+        if self.vrs_out_port:
+            cmd += ["--net-vrs-port", str(self.vrs_out_port),
+                     "--net-vrs-interval", "1"]
+        if self.json_out_port:
+            cmd += ["--net-json-port", str(self.json_out_port)]
+        if self.beast_reduce_port:
+            cmd += ["--net-beast-reduce-out-port", str(self.beast_reduce_port),
+                     "--net-beast-reduce-interval", "0.25"]
         cmd += self.extra_args
         self.proc = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -1114,6 +1225,580 @@ class TestAircraftStaleness(unittest.TestCase):
         self.assertIsNotNone(seen, "'seen' field missing")
         self.assertGreater(seen, 2.0,
                            f"Expected seen > 2.0s, got {seen}")
+
+
+# ===================================================================
+# K: Callsign API Queries
+# ===================================================================
+
+class TestApiFindCallsign(unittest.TestCase):
+    """Test /?find_callsign API endpoint."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance()
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def _feed(self, lines):
+        feed_sbs(self.inst.feeder(), lines)
+        time.sleep(0.3)
+
+    def _api_get(self, path):
+        conn = HTTPConnection("127.0.0.1", self.inst.api_port, timeout=5)
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        data = json.loads(resp.read())
+        conn.close()
+        return data
+
+    def test_k1_find_single_callsign(self):
+        """/?find_callsign=BAW123 returns exactly that aircraft."""
+        self._feed([
+            sbs_msg1("A10001", "BAW123"),
+            sbs_msg3("A10001", alt=35000, lat=51.5, lon=-0.1),
+            sbs_msg3("A10001", alt=35000, lat=51.5, lon=-0.1),
+            sbs_msg1("A10002", "DLH456"),
+            sbs_msg3("A10002", alt=30000, lat=52.0, lon=0.0),
+            sbs_msg3("A10002", alt=30000, lat=52.0, lon=0.0),
+            sbs_msg1("A10003", "AFR789"),
+            sbs_msg3("A10003", alt=25000, lat=53.0, lon=1.0),
+            sbs_msg3("A10003", alt=25000, lat=53.0, lon=1.0),
+        ])
+        time.sleep(1.5)
+        data = self._api_get("/?find_callsign=BAW123")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("a10001", hexes)
+
+    def test_k2_find_multiple_callsigns(self):
+        """/?find_callsign=BAW123,DLH456 returns both."""
+        time.sleep(0.5)
+        data = self._api_get("/?find_callsign=BAW123,DLH456")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("a10001", hexes)
+        self.assertIn("a10002", hexes)
+
+    def test_k3_find_nonexistent_callsign(self):
+        """/?find_callsign=ZZZZZZ returns empty result."""
+        data = self._api_get("/?find_callsign=ZZZZZZ")
+        aircraft = data.get("aircraft", [])
+        self.assertEqual(len(aircraft), 0)
+
+    def test_k4_no_partial_match(self):
+        """/?find_callsign=BAW returns no partial match."""
+        data = self._api_get("/?find_callsign=BAW")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertNotIn("a10001", hexes)
+
+
+# ===================================================================
+# L: Hex Lookup API Queries
+# ===================================================================
+
+class TestApiHexList(unittest.TestCase):
+    """Test /?find_hex and /?hexlist API endpoints."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance()
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def _feed(self, lines):
+        feed_sbs(self.inst.feeder(), lines)
+        time.sleep(0.3)
+
+    def _api_get(self, path):
+        conn = HTTPConnection("127.0.0.1", self.inst.api_port, timeout=5)
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        data = json.loads(resp.read())
+        conn.close()
+        return data
+
+    def test_l1_find_single_hex(self):
+        """/?find_hex=A00001 returns single aircraft."""
+        self._feed([
+            sbs_msg3("A00001", alt=20000, lat=51.5, lon=-0.1),
+            sbs_msg3("A00001", alt=20000, lat=51.5, lon=-0.1),
+            sbs_msg3("A00002", alt=25000, lat=52.0, lon=0.0),
+            sbs_msg3("A00002", alt=25000, lat=52.0, lon=0.0),
+            sbs_msg3("A00003", alt=30000, lat=53.0, lon=1.0),
+            sbs_msg3("A00003", alt=30000, lat=53.0, lon=1.0),
+        ])
+        time.sleep(1.5)
+        data = self._api_get("/?find_hex=A00001")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("a00001", hexes)
+
+    def test_l2_find_multiple_hex(self):
+        """/?find_hex=A00001,A00002 returns both."""
+        data = self._api_get("/?find_hex=A00001,A00002")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("a00001", hexes)
+        self.assertIn("a00002", hexes)
+
+    def test_l3_hexlist_alias(self):
+        """/?hexlist=A00001 is an alias for find_hex."""
+        data = self._api_get("/?hexlist=A00001")
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("a00001", hexes)
+
+    def test_l4_find_nonexistent_hex(self):
+        """/?find_hex=FFFFFF returns empty result."""
+        data = self._api_get("/?find_hex=FFFFFF")
+        aircraft = data.get("aircraft", [])
+        self.assertEqual(len(aircraft), 0)
+
+
+# ===================================================================
+# M: Connection Resilience
+# ===================================================================
+
+class TestConnectionResilience(unittest.TestCase):
+    """Test input/output reconnection behaviour."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance()
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_m1_sbs_in_reconnect(self):
+        """Disconnect and reconnect SBS-in, new aircraft appears."""
+        # First connection: feed aircraft
+        sock1 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+        feed_sbs(sock1, [
+            sbs_msg3("B00001", alt=20000, lat=51.5, lon=-0.1),
+            sbs_msg3("B00001", alt=20000, lat=51.5, lon=-0.1),
+        ])
+        time.sleep(0.5)
+        sock1.close()
+
+        # Second connection: feed different aircraft
+        time.sleep(0.5)
+        sock2 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+        feed_sbs(sock2, [
+            sbs_msg3("B00002", alt=25000, lat=52.0, lon=0.0),
+            sbs_msg3("B00002", alt=25000, lat=52.0, lon=0.0),
+        ])
+        time.sleep(0.5)
+        sock2.close()
+
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="b00002")
+        self.assertIsNotNone(data, "B00002 did not appear after reconnect")
+
+    def test_m2_sbs_out_reconnect(self):
+        """Disconnect and reconnect SBS-out, still receiving output."""
+        # First output connection
+        out1 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out1.settimeout(1)
+        out1.close()
+        time.sleep(0.5)
+
+        # Second output connection
+        out2 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out2.settimeout(2)
+
+        # Feed data
+        feeder = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+        received = b""
+        deadline = time.monotonic() + 10
+        batch = 0
+        while time.monotonic() < deadline:
+            feed_sbs(feeder, [
+                sbs_msg3("B00003", alt=30000 + batch, lat=51.5, lon=-0.1),
+                sbs_msg3("B00003", alt=30000 + batch, lat=51.5, lon=-0.1),
+            ])
+            batch += 1
+            time.sleep(0.5)
+            try:
+                chunk = out2.recv(4096)
+                if chunk:
+                    received += chunk
+                    if b"B00003" in received.upper():
+                        break
+            except socket.timeout:
+                pass
+        feeder.close()
+        out2.close()
+        self.assertIn(b"B00003", received.upper(),
+                       "ICAO not found on reconnected SBS output")
+
+    def test_m3_process_survives_disconnect(self):
+        """After all clients disconnect, process still alive."""
+        # Connect and disconnect a client
+        sock = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+        sock.close()
+        time.sleep(1)
+        self.assertIsNone(self.inst.proc.poll(),
+                          "readsb died after client disconnect")
+
+
+# ===================================================================
+# N: Multiple Simultaneous Clients
+# ===================================================================
+
+class TestMultipleClients(unittest.TestCase):
+    """Test multiple simultaneous readers on SBS output."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance()
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_n1_two_readers(self):
+        """Two SBS-out sockets both receive data."""
+        out1 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out1.settimeout(2)
+        out2 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out2.settimeout(2)
+
+        feeder = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+
+        rx1 = b""
+        rx2 = b""
+        deadline = time.monotonic() + 10
+        batch = 0
+        while time.monotonic() < deadline:
+            feed_sbs(feeder, [
+                sbs_msg3("C00001", alt=20000 + batch, lat=51.5, lon=-0.1),
+                sbs_msg3("C00001", alt=20000 + batch, lat=51.5, lon=-0.1),
+            ])
+            batch += 1
+            time.sleep(0.5)
+            for sock, buf_name in [(out1, "rx1"), (out2, "rx2")]:
+                try:
+                    chunk = sock.recv(4096)
+                    if buf_name == "rx1":
+                        rx1 += chunk
+                    else:
+                        rx2 += chunk
+                except socket.timeout:
+                    pass
+            if b"C00001" in rx1.upper() and b"C00001" in rx2.upper():
+                break
+
+        feeder.close()
+        out1.close()
+        out2.close()
+
+        self.assertIn(b"C00001", rx1.upper(), "Reader 1 missing data")
+        self.assertIn(b"C00001", rx2.upper(), "Reader 2 missing data")
+
+    def test_n2_disconnect_one_reader(self):
+        """Disconnect one reader, remaining one still works."""
+        out1 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out1.settimeout(2)
+        out2 = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        out2.settimeout(2)
+
+        # Disconnect one
+        out1.close()
+        time.sleep(0.5)
+
+        feeder = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_in_port), timeout=5
+        )
+
+        rx2 = b""
+        deadline = time.monotonic() + 10
+        batch = 0
+        while time.monotonic() < deadline:
+            feed_sbs(feeder, [
+                sbs_msg3("C00002", alt=25000 + batch, lat=52.0, lon=0.0),
+                sbs_msg3("C00002", alt=25000 + batch, lat=52.0, lon=0.0),
+            ])
+            batch += 1
+            time.sleep(0.5)
+            try:
+                chunk = out2.recv(4096)
+                if chunk:
+                    rx2 += chunk
+                    if b"C00002" in rx2.upper():
+                        break
+            except socket.timeout:
+                pass
+
+        feeder.close()
+        out2.close()
+
+        self.assertIn(b"C00002", rx2.upper(),
+                       "Remaining reader not receiving after other disconnect")
+        self.assertIsNone(self.inst.proc.poll(),
+                          "readsb crashed after partial disconnect")
+
+
+# ===================================================================
+# O: VRS JSON Output
+# ===================================================================
+
+class TestVrsJsonOutput(unittest.TestCase):
+    """Test VRS format output on --net-vrs-port."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(vrs_out=True)
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_o1_vrs_format(self):
+        """VRS output has acList structure with correct fields."""
+        # Connect to VRS output
+        vrs_sock = socket.create_connection(
+            ("127.0.0.1", self.inst.vrs_out_port), timeout=5
+        )
+        vrs_sock.settimeout(3)
+
+        feeder = self.inst.feeder()
+
+        received = b""
+        deadline = time.monotonic() + 15
+        batch = 0
+        while time.monotonic() < deadline:
+            feed_sbs(feeder, [
+                sbs_msg1("D00001", "TST999"),
+                sbs_msg3("D00001", alt=35000, lat=51.5, lon=-0.1, gs=450, track=180),
+                sbs_msg3("D00001", alt=35000, lat=51.5, lon=-0.1, gs=450, track=180),
+                sbs_msg4("D00001", gs=450, track=180),
+                sbs_msg6("D00001", squawk="7000"),
+            ])
+            batch += 1
+            time.sleep(1.5)
+            try:
+                chunk = vrs_sock.recv(8192)
+                if chunk:
+                    received += chunk
+                    if b"acList" in received:
+                        break
+            except socket.timeout:
+                pass
+
+        vrs_sock.close()
+        text = received.decode(errors="replace")
+
+        # VRS sends complete JSON objects; find one with acList
+        self.assertIn("acList", text, "VRS output missing acList")
+
+        # Try to parse the JSON
+        # VRS output may have multiple concatenated objects, find the first valid one
+        vrs_data = None
+        for line in text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+                if "acList" in parsed:
+                    vrs_data = parsed
+                    break
+            except json.JSONDecodeError:
+                continue
+
+        # If no newline-delimited JSON, try the whole blob
+        if vrs_data is None:
+            try:
+                vrs_data = json.loads(text)
+            except json.JSONDecodeError:
+                pass
+
+        if vrs_data is not None and vrs_data.get("acList"):
+            ac = vrs_data["acList"][0]
+            # Check for VRS field names
+            self.assertIn("Icao", ac)
+            self.assertIn("Lat", ac)
+            self.assertIn("Long", ac)
+
+
+# ===================================================================
+# P: Net Connector (outbound client mode)
+# ===================================================================
+
+class TestNetConnector(unittest.TestCase):
+    """Test --net-connector outbound connection mode."""
+
+    def test_p1_net_connector_sbs_out(self):
+        """Readsb connects to a test server with sbs_out protocol."""
+        # Start a TCP server
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server_port = server.getsockname()[1]
+        server.listen(1)
+        server.settimeout(15)
+
+        # Start readsb with --net-connector pointing to our server
+        inst = ReadsbInstance(
+            extra_args=[
+                "--net-connector",
+                f"127.0.0.1,{server_port},sbs_out",
+            ]
+        )
+        inst.__enter__()
+        try:
+            # Accept the incoming connection from readsb
+            try:
+                client, _ = server.accept()
+                client.settimeout(3)
+            except socket.timeout:
+                self.fail("readsb did not connect to test server")
+
+            # Feed data via SBS input
+            feeder = inst.feeder()
+            received = b""
+            deadline = time.monotonic() + 10
+            batch = 0
+            while time.monotonic() < deadline:
+                feed_sbs(feeder, [
+                    sbs_msg3("E00001", alt=20000 + batch, lat=51.5, lon=-0.1),
+                    sbs_msg3("E00001", alt=20000 + batch, lat=51.5, lon=-0.1),
+                ])
+                batch += 1
+                time.sleep(0.5)
+                try:
+                    chunk = client.recv(4096)
+                    if chunk:
+                        received += chunk
+                        if b"E00001" in received.upper():
+                            break
+                except socket.timeout:
+                    pass
+
+            client.close()
+            self.assertIn(b"E00001", received.upper(),
+                           "ICAO not found in net-connector SBS output")
+        finally:
+            inst.__exit__(None, None, None)
+            server.close()
+
+
+# ===================================================================
+# Q: JSON Network Output
+# ===================================================================
+
+class TestJsonNetworkOutput(unittest.TestCase):
+    """Test --net-json-port TCP JSON output.
+
+    JSON port output only triggers for non-SBS-input messages (Beast/raw),
+    so this test uses Beast input with DF17 airborne position messages.
+    CPR decoding requires both even and odd frames to determine position.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # json_reliable=1 lowers the position reliability threshold so
+        # the first successfully decoded position triggers output.
+        cls.inst = ReadsbInstance(
+            beast_in=True, json_out=True,
+            extra_args=["--json-reliable", "1"],
+        )
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_q1_json_tcp_output(self):
+        """JSON-over-TCP output has hex, lat, lon fields."""
+        json_sock = socket.create_connection(
+            ("127.0.0.1", self.inst.json_out_port), timeout=5
+        )
+        json_sock.settimeout(3)
+
+        beast_sock = socket.create_connection(
+            ("127.0.0.1", self.inst.beast_in_port), timeout=5
+        )
+
+        received = b""
+        deadline = time.monotonic() + 15
+        ts = 1000  # Beast timestamp counter
+        batch = 0
+        while time.monotonic() < deadline:
+            # Vary position slightly each iteration to avoid duplicate detection
+            lat = 51.5 + batch * 0.002
+            lon = -0.1 + batch * 0.002
+            alt = 35000
+
+            # Send both even and odd CPR frames (needed for global decode)
+            even_msg = make_df17_position("F00001", lat, lon, alt, odd=0)
+            odd_msg = make_df17_position("F00001", lat, lon, alt, odd=1)
+
+            beast_sock.sendall(beast_frame(even_msg, timestamp=ts))
+            ts += 500
+            beast_sock.sendall(beast_frame(odd_msg, timestamp=ts))
+            ts += 500
+
+            batch += 1
+            time.sleep(0.5)
+            try:
+                chunk = json_sock.recv(8192)
+                if chunk:
+                    received += chunk
+                    if b"f00001" in received:
+                        break
+            except socket.timeout:
+                pass
+
+        beast_sock.close()
+        json_sock.close()
+        text = received.decode(errors="replace")
+
+        # Each line should be valid JSON
+        found_aircraft = False
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if obj.get("hex") == "f00001":
+                    found_aircraft = True
+                    self.assertIn("lat", obj)
+                    self.assertIn("lon", obj)
+                    break
+            except json.JSONDecodeError:
+                continue
+
+        self.assertTrue(found_aircraft,
+                        "Aircraft f00001 not found in JSON TCP output")
 
 
 # ---------------------------------------------------------------------------
