@@ -1004,6 +1004,118 @@ class TestMultiOutput(unittest.TestCase):
                        "ICAO not found in SBS output")
 
 
+# ===================================================================
+# I: Stats JSON
+# ===================================================================
+
+class TestStatsJson(unittest.TestCase):
+    """Verify stats.json is written with expected structure."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(
+            extra_args=["--lat", "51.5", "--lon", "-0.1"],
+        )
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_i1_stats_json(self):
+        """stats.json has expected top-level fields after feeding SBS data."""
+        # Feed data over several seconds; stats.json is only written every ~10s
+        feeder = self.inst.feeder()
+        stats_path = Path(self.inst.tmpdir) / "stats.json"
+        deadline = time.monotonic() + 20
+        data = None
+        while time.monotonic() < deadline:
+            feed_sbs(feeder, [
+                sbs_msg3("112233", alt=20000, lat=51.5, lon=-0.1),
+                sbs_msg3("112233", alt=20000, lat=51.5, lon=-0.1),
+            ])
+            if stats_path.exists():
+                try:
+                    data = json.loads(stats_path.read_text())
+                    if data.get("total", {}).get("messages", 0) > 0:
+                        break
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            time.sleep(1)
+
+        self.assertIsNotNone(data, "stats.json not found or empty")
+
+        # Top-level "now" field
+        self.assertIn("now", data)
+        self.assertIsInstance(data["now"], (int, float))
+
+        # "total" section with message count
+        self.assertIn("total", data)
+        total = data["total"]
+        self.assertGreater(total.get("messages", 0), 0,
+                           "Expected total messages > 0")
+
+        # "total" -> "remote" section (we're in --net-only mode)
+        self.assertIn("remote", total)
+        remote = total["remote"]
+
+        # SBS = basestation format counter
+        self.assertGreater(remote.get("basestation", 0), 0,
+                           "Expected basestation messages > 0")
+
+        # Track count
+        self.assertIn("tracks", total)
+        self.assertGreaterEqual(total["tracks"].get("all", 0), 1,
+                                "Expected at least 1 track")
+
+
+# ===================================================================
+# J: Aircraft Staleness
+# ===================================================================
+
+class TestAircraftStaleness(unittest.TestCase):
+    """Verify the 'seen' field increases after messages stop."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(
+            extra_args=["--lat", "51.5", "--lon", "-0.1"],
+        )
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_j1_seen_increases(self):
+        """After messages stop, the 'seen' field grows past 2 seconds."""
+        feeder = self.inst.feeder()
+        # Feed data to establish the aircraft
+        for _ in range(4):
+            feed_sbs(feeder, [
+                sbs_msg3("AABB00", alt=15000, lat=51.5, lon=-0.1),
+                sbs_msg3("AABB00", alt=15000, lat=51.5, lon=-0.1),
+            ])
+            time.sleep(0.3)
+
+        # Confirm aircraft appears
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="aabb00")
+        self.assertIsNotNone(data, "aircraft.json never contained aabb00")
+
+        # Stop feeding and wait for staleness to accumulate
+        time.sleep(4)
+
+        # Read aircraft.json again
+        path = Path(self.inst.tmpdir) / "aircraft.json"
+        data = json.loads(path.read_text())
+        ac = {a["hex"]: a for a in data.get("aircraft", [])}
+        self.assertIn("aabb00", ac, "aabb00 disappeared from aircraft.json")
+        seen = ac["aabb00"].get("seen")
+        self.assertIsNotNone(seen, "'seen' field missing")
+        self.assertGreater(seen, 2.0,
+                           f"Expected seen > 2.0s, got {seen}")
+
+
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
