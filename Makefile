@@ -164,7 +164,7 @@ viewadsb: readsb
 	cp readsb viewadsb
 
 clean:
-	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests convert_benchmark
+	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests unittests convert_benchmark
 
 cprtest: cprtests
 	./cprtests
@@ -181,10 +181,18 @@ dbtests: dbtests.o
 dbtest: dbtests
 	./dbtests
 
+unittests: unittests.o mode_ac.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+unittest: unittests
+	./unittests
+
+test: cprtest dbtest unittest
+
 inttest: readsb
 	python3 tests/integration_test.py
 
-fulltest: cprtest inttest
+fulltest: test inttest
 
 benchmarks: convert_benchmark
 	./convert_benchmark
