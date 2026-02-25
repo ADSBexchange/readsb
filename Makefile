@@ -181,6 +181,11 @@ dbtests: dbtests.o
 dbtest: dbtests
 	./dbtests
 
+inttest: readsb
+	python3 tests/integration_test.py
+
+fulltest: cprtest inttest
+
 benchmarks: convert_benchmark
 	./convert_benchmark
 
