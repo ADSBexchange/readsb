@@ -135,8 +135,6 @@ CFLAGS += -g $(OPTIMIZE)
 
 all: readsb viewadsb
 
-test: cprtest dbtest
-
 ifneq ($(shell cat .version 2>/dev/null),prefix $(READSB_VERSION))
 .PHONY: .version
 .version:
@@ -164,7 +162,7 @@ viewadsb: readsb
 	cp readsb viewadsb
 
 clean:
-	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests unittests mode_s_tests convert_benchmark
+	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests unittests mode_s_tests comm_b_tests icao_filter_tests convert_tests util_tests convert_benchmark
 
 cprtest: cprtests
 	./cprtests
@@ -193,7 +191,31 @@ mode_s_tests: mode_s_tests.o mode_ac.o crc.o fasthash.o ais_charset.o
 mstest: mode_s_tests
 	./mode_s_tests
 
-test: cprtest dbtest unittest mstest
+comm_b_tests: comm_b_tests.o ais_charset.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+cbtest: comm_b_tests
+	./comm_b_tests
+
+icao_filter_tests: icao_filter_tests.o icao_filter.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+iftest: icao_filter_tests
+	./icao_filter_tests
+
+convert_tests: convert_tests.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+cvtest: convert_tests
+	./convert_tests
+
+util_tests: util_tests.o util.o fasthash.o threadpool.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm -lzstd -lz -lpthread -lrt
+
+uttest: util_tests
+	./util_tests
+
+test: cprtest dbtest unittest mstest cbtest iftest cvtest uttest
 
 inttest: readsb
 	python3 tests/integration_test.py
