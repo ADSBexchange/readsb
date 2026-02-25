@@ -181,7 +181,7 @@ dbtests: dbtests.o
 dbtest: dbtests
 	./dbtests
 
-unittests: unittests.o mode_ac.o fasthash.o
+unittests: unittests.o mode_ac.o fasthash.o crc.o
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 unittest: unittests

@@ -13,6 +13,7 @@ import os
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -127,19 +128,122 @@ def poll_aircraft_json(json_dir, timeout=8, min_aircraft=1, want_hex=None):
 
 
 # ---------------------------------------------------------------------------
+# Beast / Raw-hex protocol helpers
+# ---------------------------------------------------------------------------
+
+# Mode-S CRC polynomial (matching the C implementation in crc.c)
+_MODES_GENERATOR_POLY = 0xFFF409
+_crc_table = None
+
+
+def _init_crc_table():
+    """Build the 256-entry CRC lookup table (same algorithm as crc.c)."""
+    global _crc_table
+    if _crc_table is not None:
+        return
+    _crc_table = [0] * 256
+    for i in range(256):
+        c = i << 16
+        for _ in range(8):
+            if c & 0x800000:
+                c = (c << 1) ^ _MODES_GENERATOR_POLY
+            else:
+                c = c << 1
+        _crc_table[i] = c & 0x00FFFFFF
+
+
+def modes_checksum(msg_bytes):
+    """Compute the Mode-S CRC over *msg_bytes* (bytes/bytearray).
+
+    Matches modesChecksum() in crc.c.  Returns a 24-bit integer.
+    For a valid message the result is 0 (CRC is XORed into the last 3 bytes).
+    """
+    _init_crc_table()
+    n = len(msg_bytes)
+    assert n >= 3
+    rem = 0
+    for i in range(n - 3):
+        rem = (_crc_table[msg_bytes[i] ^ ((rem & 0xFF0000) >> 16)] ^ (rem << 8)) & 0xFFFFFF
+    rem = rem ^ (msg_bytes[n - 3] << 16) ^ (msg_bytes[n - 2] << 8) ^ msg_bytes[n - 1]
+    return rem & 0xFFFFFF
+
+
+def make_df17_msg(icao_hex, typecode=4, payload_bytes=None):
+    """Construct a 14-byte DF17 message with valid CRC.
+
+    *icao_hex* is a 6-char hex string (e.g. "4840D6").
+    *typecode* is the 5-bit ADS-B type code (default 4 = identification).
+    *payload_bytes* fills bytes 4-10 after the type code nibble; random if None.
+    """
+    icao = int(icao_hex, 16)
+    msg = bytearray(14)
+    # Byte 0: DF17 = 10001_XXX (downlink format 17, CA=0)
+    msg[0] = 0x8D
+    msg[1] = (icao >> 16) & 0xFF
+    msg[2] = (icao >> 8) & 0xFF
+    msg[3] = icao & 0xFF
+    # ME field: 7 bytes (bytes 4-10), first 5 bits = typecode
+    msg[4] = (typecode << 3) & 0xFF
+    if payload_bytes:
+        for i, b in enumerate(payload_bytes[:6]):
+            msg[4 + 1 + i] = b
+    # Compute CRC over first 11 bytes, embed in last 3
+    # Zero out PI field first
+    msg[11] = msg[12] = msg[13] = 0
+    crc = modes_checksum(msg)
+    msg[11] = (crc >> 16) & 0xFF
+    msg[12] = (crc >> 8) & 0xFF
+    msg[13] = crc & 0xFF
+    return bytes(msg)
+
+
+def beast_escape(data):
+    """Escape 0x1A bytes in *data* by doubling them (Beast protocol)."""
+    return data.replace(b'\x1a', b'\x1a\x1a')
+
+
+def beast_frame(msg_bytes, timestamp=0, signal_level=0xA0):
+    """Build a complete Beast wire frame for a Mode-S message.
+
+    *msg_bytes* is the raw message (7 or 14 bytes).
+    Returns bytes ready to send on a Beast-input TCP connection.
+    """
+    if len(msg_bytes) == 14:
+        msg_type = b'3'  # long message
+    elif len(msg_bytes) == 7:
+        msg_type = b'2'  # short message
+    elif len(msg_bytes) == 2:
+        msg_type = b'1'  # Mode A/C
+    else:
+        raise ValueError(f"Unexpected message length: {len(msg_bytes)}")
+
+    # 6-byte big-endian timestamp + 1-byte signal level
+    ts_bytes = struct.pack(">Q", timestamp)[2:]  # take last 6 bytes
+    sig = bytes([signal_level])
+
+    body = beast_escape(ts_bytes + sig + msg_bytes)
+    return b'\x1a' + msg_type + body
+
+
+# ---------------------------------------------------------------------------
 # ReadsbInstance — context manager
 # ---------------------------------------------------------------------------
 
 class ReadsbInstance:
     """Start / stop a readsb process with unique ports and a temp directory."""
 
-    def __init__(self, extra_args=None):
+    def __init__(self, extra_args=None, beast_in=False, beast_out=False,
+                 raw_in=False, raw_out=False):
         self.extra_args = extra_args or []
         self.proc = None
         self.tmpdir = None
         self.sbs_in_port = get_free_port()
         self.sbs_out_port = get_free_port()
         self.api_port = get_free_port()
+        self.beast_in_port = get_free_port() if beast_in else 0
+        self.beast_out_port = get_free_port() if beast_out else 0
+        self.raw_in_port = get_free_port() if raw_in else 0
+        self.raw_out_port = get_free_port() if raw_out else 0
         self._feeder = None
 
     def __enter__(self):
@@ -154,15 +258,26 @@ class ReadsbInstance:
             "--net-sbs-port", str(self.sbs_out_port),
             "--net-api-port", str(self.api_port),
             "--auto-exit", "60",
-        ] + self.extra_args
+        ]
+        if self.beast_in_port:
+            cmd += ["--net-bi-port", str(self.beast_in_port)]
+        if self.beast_out_port:
+            cmd += ["--net-bo-port", str(self.beast_out_port)]
+        if self.raw_in_port:
+            cmd += ["--net-ri-port", str(self.raw_in_port)]
+        if self.raw_out_port:
+            cmd += ["--net-ro-port", str(self.raw_out_port)]
+        cmd += self.extra_args
         self.proc = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        if not wait_for_port(self.sbs_in_port):
+        # Wait for the primary listen port
+        wait_port = self.beast_in_port or self.raw_in_port or self.sbs_in_port
+        if not wait_for_port(wait_port):
             self.proc.kill()
             self.proc.wait()
             raise RuntimeError(
-                f"readsb failed to listen on SBS-in port {self.sbs_in_port}"
+                f"readsb failed to listen on port {wait_port}"
             )
         # wait for receiver.json so JSON output is ready
         deadline = time.monotonic() + 10
@@ -631,6 +746,262 @@ class TestUavRejected(unittest.TestCase):
             data = json.loads(path.read_text())
             hexes = {a["hex"] for a in data.get("aircraft", [])}
             self.assertNotIn("$000001", hexes)
+
+
+# ===================================================================
+# F: Beast Binary Input
+# ===================================================================
+
+class TestBeastInput(unittest.TestCase):
+    """Feed Beast binary data on --net-bi-port, verify JSON output."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(beast_in=True)
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def _beast_feeder(self):
+        """Return a TCP connection to the Beast-in port."""
+        return socket.create_connection(
+            ("127.0.0.1", self.inst.beast_in_port), timeout=5
+        )
+
+    def test_f1_beast_df17(self):
+        """DF17 via Beast binary -> aircraft appears in JSON."""
+        # Known-good DF17 message (ICAO 4840D6, identification)
+        msg = bytes.fromhex("8D4840D6202CC371C32CE0576098")
+        frame = beast_frame(msg, timestamp=0x000102030405)
+        sock = self._beast_feeder()
+        # Send multiple times for reliable detection
+        for _ in range(5):
+            sock.sendall(frame)
+            time.sleep(0.3)
+        sock.close()
+
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="4840d6")
+        self.assertIsNotNone(data, "aircraft.json never contained 4840d6")
+        hexes = {a["hex"] for a in data["aircraft"]}
+        self.assertIn("4840d6", hexes)
+
+    def test_f2_beast_escape_handling(self):
+        """Beast frame with 0x1A in timestamp is handled correctly."""
+        # Construct a DF17 with a known ICAO, use timestamp containing 0x1A
+        msg = make_df17_msg("1A1A1A", typecode=4, payload_bytes=b'\x20\x30\x40\x50\x60\x70')
+        # Timestamp intentionally contains 0x1A bytes
+        frame = beast_frame(msg, timestamp=0x001A001A001A)
+        sock = self._beast_feeder()
+        for _ in range(5):
+            sock.sendall(frame)
+            time.sleep(0.3)
+        sock.close()
+
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="1a1a1a")
+        self.assertIsNotNone(data, "aircraft.json never contained 1a1a1a")
+        hexes = {a["hex"] for a in data["aircraft"]}
+        self.assertIn("1a1a1a", hexes)
+
+    def test_f3_beast_no_crash_on_garbage(self):
+        """Random bytes on Beast-in don't crash readsb."""
+        sock = self._beast_feeder()
+        # Send garbage data
+        garbage = bytes(range(256)) * 4
+        sock.sendall(garbage)
+        sock.close()
+        time.sleep(1)
+        # Process should still be running
+        self.assertIsNone(self.inst.proc.poll(),
+                          "readsb crashed on garbage Beast input")
+
+
+# ===================================================================
+# G: Raw Hex Input
+# ===================================================================
+
+class TestRawHexInput(unittest.TestCase):
+    """Feed raw hex messages on --net-ri-port, verify JSON output."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(raw_in=True)
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def _raw_feeder(self):
+        """Return a TCP connection to the raw-in port."""
+        return socket.create_connection(
+            ("127.0.0.1", self.inst.raw_in_port), timeout=5
+        )
+
+    def test_g1_raw_hex_df17(self):
+        """DF17 as *HEXHEX...;\n on raw-in -> aircraft in JSON."""
+        # Known-good DF17 (ICAO 4840D6)
+        hex_msg = "8D4840D6202CC371C32CE0576098"
+        raw_line = f"*{hex_msg};\n"
+        sock = self._raw_feeder()
+        for _ in range(5):
+            sock.sendall(raw_line.encode())
+            time.sleep(0.3)
+        sock.close()
+
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="4840d6")
+        self.assertIsNotNone(data, "aircraft.json never contained 4840d6")
+        hexes = {a["hex"] for a in data["aircraft"]}
+        self.assertIn("4840d6", hexes)
+
+    def test_g2_raw_hex_at_prefix(self):
+        """@-prefixed raw hex (with 12-char timestamp) is accepted."""
+        hex_msg = "8D40621D58C382D690C8AC2863A7"
+        # @ + 12-char hex timestamp + hex message + ;
+        raw_line = f"@000000000001{hex_msg};\n"
+        sock = self._raw_feeder()
+        for _ in range(5):
+            sock.sendall(raw_line.encode())
+            time.sleep(0.3)
+        sock.close()
+
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="40621d")
+        self.assertIsNotNone(data, "aircraft.json never contained 40621d")
+        hexes = {a["hex"] for a in data["aircraft"]}
+        self.assertIn("40621d", hexes)
+
+    def test_g3_raw_hex_malformed_no_crash(self):
+        """Malformed hex input doesn't crash readsb."""
+        sock = self._raw_feeder()
+        bad_lines = [
+            b"*;\n",               # empty message
+            b"*ZZZZZZ;\n",         # non-hex characters
+            b"*8D;\n",             # too short
+            b"*8D4840D6202C;\n",   # truncated DF17
+            b"garbage\n",          # no framing at all
+            b"*" + b"FF" * 100 + b";\n",  # way too long
+        ]
+        for line in bad_lines:
+            sock.sendall(line)
+            time.sleep(0.1)
+        sock.close()
+        time.sleep(1)
+        self.assertIsNone(self.inst.proc.poll(),
+                          "readsb crashed on malformed raw hex input")
+
+    def test_g4_raw_hex_short_message(self):
+        """7-byte (56-bit) Mode-S message via raw hex doesn't crash."""
+        # Build a DF11 (all-call reply): 5D + ICAO(3 bytes) + PI(3 bytes)
+        msg = bytearray(7)
+        msg[0] = 0x5D
+        msg[1] = 0xAB
+        msg[2] = 0xCD
+        msg[3] = 0xEF
+        # Compute CRC and embed
+        crc = modes_checksum(msg)
+        msg[4] = (crc >> 16) & 0xFF
+        msg[5] = (crc >> 8) & 0xFF
+        msg[6] = crc & 0xFF
+        hex_msg = msg.hex().upper()
+        raw_line = f"*{hex_msg};\n"
+        sock = self._raw_feeder()
+        for _ in range(3):
+            sock.sendall(raw_line.encode())
+            time.sleep(0.2)
+        sock.close()
+        time.sleep(1)
+        self.assertIsNone(self.inst.proc.poll(),
+                          "readsb crashed on short Mode-S message")
+
+
+# ===================================================================
+# H: Multi-Output Format
+# ===================================================================
+
+class TestMultiOutput(unittest.TestCase):
+    """Feed Beast input, verify data on Beast-out, raw-out, and SBS-out."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(
+            beast_in=True, beast_out=True, raw_out=True,
+        )
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_h1_cross_format(self):
+        """Beast input appears on Beast-out, raw-out, and SBS-out."""
+        # Connect to all output ports first
+        beast_out = socket.create_connection(
+            ("127.0.0.1", self.inst.beast_out_port), timeout=5
+        )
+        beast_out.settimeout(2)
+        raw_out = socket.create_connection(
+            ("127.0.0.1", self.inst.raw_out_port), timeout=5
+        )
+        raw_out.settimeout(2)
+        sbs_out = socket.create_connection(
+            ("127.0.0.1", self.inst.sbs_out_port), timeout=5
+        )
+        sbs_out.settimeout(2)
+
+        # Feed a DF17 via Beast
+        msg = bytes.fromhex("8D4840D6202CC371C32CE0576098")
+        frame = beast_frame(msg, timestamp=0x000102030405)
+
+        beast_in = socket.create_connection(
+            ("127.0.0.1", self.inst.beast_in_port), timeout=5
+        )
+
+        beast_rx = b""
+        raw_rx = b""
+        sbs_rx = b""
+
+        deadline = time.monotonic() + 10
+        batch = 0
+        while time.monotonic() < deadline:
+            beast_in.sendall(frame)
+            batch += 1
+            time.sleep(0.5)
+
+            for sock, buf_name in [(beast_out, "beast"), (raw_out, "raw"), (sbs_out, "sbs")]:
+                try:
+                    chunk = sock.recv(4096)
+                    if buf_name == "beast":
+                        beast_rx += chunk
+                    elif buf_name == "raw":
+                        raw_rx += chunk
+                    else:
+                        sbs_rx += chunk
+                except socket.timeout:
+                    pass
+
+            # Check if we have data on all three
+            if beast_rx and raw_rx and sbs_rx:
+                break
+
+        beast_in.close()
+        beast_out.close()
+        raw_out.close()
+        sbs_out.close()
+
+        # Beast output should contain 0x1A framing
+        self.assertIn(b'\x1a', beast_rx,
+                       "No Beast framing in Beast output")
+
+        # Raw output should contain the hex of our ICAO
+        raw_text = raw_rx.decode(errors="replace").upper()
+        self.assertIn("4840D6", raw_text,
+                       "ICAO not found in raw output")
+
+        # SBS output should contain the ICAO
+        sbs_text = sbs_rx.decode(errors="replace").upper()
+        self.assertIn("4840D6", sbs_text,
+                       "ICAO not found in SBS output")
 
 
 # ---------------------------------------------------------------------------

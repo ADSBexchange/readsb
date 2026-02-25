@@ -8,8 +8,9 @@
 #include "readsb.h"
 #include <assert.h>
 
-// Linker stub: many headers reference this extern but our tests don't use it
+// Linker stubs: many headers reference these externs but our tests don't use them
 struct _Modes Modes;
+void setExit(int __attribute__((unused)) arg) { }
 
 // ---- helpers ----
 
@@ -368,6 +369,120 @@ static void testFasthash(void) {
     fprintf(stderr, "testFasthash: done\n\n");
 }
 
+// ---- testCrcChecksum ----
+
+static int hexchar(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+static int hex_to_bytes(const char *hex, uint8_t *out, int maxlen) {
+    int len = 0;
+    while (*hex && *(hex+1) && len < maxlen) {
+        int hi = hexchar(*hex);
+        int lo = hexchar(*(hex+1));
+        if (hi < 0 || lo < 0) break;
+        out[len++] = (uint8_t)((hi << 4) | lo);
+        hex += 2;
+    }
+    return len;
+}
+
+static void testCrcChecksum(void) {
+    fprintf(stderr, "=== testCrcChecksum ===\n");
+
+    modesChecksumInit(0);
+
+    // --- Valid DF17 messages: CRC should be 0 ---
+    // These are known-good ADS-B messages with valid CRC embedded in last 3 bytes
+    {
+        // DF17 identification: ICAO 4840D6
+        uint8_t msg[14];
+        int len = hex_to_bytes("8D4840D6202CC371C32CE0576098", msg, 14);
+        ASSERT_EQ_INT("DF17 ident msg length", len, 14);
+        uint32_t crc = modesChecksum(msg, 112);
+        ASSERT_EQ_U32("DF17 ident CRC=0", crc, 0);
+    }
+    {
+        // DF17 airborne position: ICAO 40621D
+        uint8_t msg[14];
+        int len = hex_to_bytes("8D40621D58C382D690C8AC2863A7", msg, 14);
+        ASSERT_EQ_INT("DF17 position msg length", len, 14);
+        uint32_t crc = modesChecksum(msg, 112);
+        ASSERT_EQ_U32("DF17 position CRC=0", crc, 0);
+    }
+
+    // --- Corrupted message: CRC should be non-zero ---
+    {
+        uint8_t msg[14];
+        hex_to_bytes("8D4840D6202CC371C32CE0576098", msg, 14);
+        msg[5] ^= 0x01; // flip one bit in payload
+        uint32_t crc = modesChecksum(msg, 112);
+        ASSERT_TRUE("corrupted DF17 CRC!=0", crc != 0);
+    }
+
+    // --- Short (56-bit) message round-trip ---
+    // Construct a 7-byte message, compute CRC, embed it, verify
+    {
+        uint8_t msg[7] = {0x5D, 0xAB, 0xCD, 0xEF, 0x00, 0x00, 0x00};
+        // Compute CRC over all 56 bits (last 3 bytes will be XORed with remainder)
+        uint32_t crc = modesChecksum(msg, 56);
+        // Embed CRC in last 3 bytes
+        msg[4] = (crc >> 16) & 0xFF;
+        msg[5] = (crc >> 8) & 0xFF;
+        msg[6] = crc & 0xFF;
+        // Now checksum should return 0
+        uint32_t verify = modesChecksum(msg, 56);
+        ASSERT_EQ_U32("short msg round-trip CRC=0", verify, 0);
+    }
+
+    // --- CRC is deterministic ---
+    {
+        uint8_t msg[14];
+        hex_to_bytes("8D4840D6202CC371C32CE0576098", msg, 14);
+        uint32_t crc1 = modesChecksum(msg, 112);
+        uint32_t crc2 = modesChecksum(msg, 112);
+        ASSERT_EQ_U32("CRC deterministic", crc1, crc2);
+    }
+
+    // --- CRC is position-dependent: same bytes, different position ---
+    {
+        uint8_t msg1[14] = {0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00};
+        uint8_t msg2[14] = {0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
+        uint32_t crc1 = modesChecksum(msg1, 112);
+        uint32_t crc2 = modesChecksum(msg2, 112);
+        ASSERT_TRUE("CRC position-dependent", crc1 != crc2);
+    }
+
+    // --- CRC is always 24-bit (masked to 0xFFFFFF) ---
+    {
+        uint8_t msg[14];
+        hex_to_bytes("8D4840D6202CC371C32CE0576098", msg, 14);
+        msg[5] ^= 0xFF; // corrupt heavily
+        uint32_t crc = modesChecksum(msg, 112);
+        ASSERT_TRUE("CRC is 24-bit", (crc & 0xFF000000) == 0);
+    }
+
+    // --- Long message round-trip (112-bit) ---
+    {
+        uint8_t msg[14] = {0x8D, 0x12, 0x34, 0x56, 0x20, 0xAB, 0xCD,
+                           0xEF, 0x01, 0x23, 0x45, 0x00, 0x00, 0x00};
+        uint32_t crc = modesChecksum(msg, 112);
+        msg[11] = (crc >> 16) & 0xFF;
+        msg[12] = (crc >> 8) & 0xFF;
+        msg[13] = crc & 0xFF;
+        uint32_t verify = modesChecksum(msg, 112);
+        ASSERT_EQ_U32("long msg round-trip CRC=0", verify, 0);
+    }
+
+    crcCleanupTables();
+    fprintf(stderr, "testCrcChecksum: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -378,6 +493,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testGetbits();
     testModeAToModeC();
     testFasthash();
+    testCrcChecksum();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
