@@ -323,6 +323,123 @@ static void testInitConverter(void) {
     fprintf(stderr, "testInitConverter: done\n\n");
 }
 
+// ---- testConvertSC16Generic ----
+
+static void testConvertSC16Generic(void) {
+    fprintf(stderr, "=== testConvertSC16Generic ===\n");
+
+    // Constant DC offset: all I=16384, Q=16384 (int16_t LE)
+    // fI = 16384/32768 = 0.5, fQ = 0.5
+    // DC filter should converge z1_I, z1_Q toward 0.5
+    unsigned nsamples = 64;
+    int16_t iq_data[128]; // 64 samples * 2
+    for (unsigned i = 0; i < nsamples; i++) {
+        iq_data[2 * i] = htole16(16384);
+        iq_data[2 * i + 1] = htole16(16384);
+    }
+
+    struct converter_state state;
+    state.z1_I = 0;
+    state.z1_Q = 0;
+    state.dc_a = 0.5;
+    state.dc_b = 0.5;
+
+    uint16_t mag_data[64];
+    double mean_level = 0, mean_power = 0;
+
+    for (int batch = 0; batch < 200; batch++) {
+        convert_sc16_generic(iq_data, mag_data, nsamples, &state, &mean_level, &mean_power);
+    }
+
+    float expected_dc = 16384.0f / 32768.0f; // 0.5
+    ASSERT_FLOAT_NEAR("sc16 gen z1_I", state.z1_I, expected_dc, 0.1);
+    ASSERT_FLOAT_NEAR("sc16 gen z1_Q", state.z1_Q, expected_dc, 0.1);
+
+    fprintf(stderr, "testConvertSC16Generic: done\n\n");
+}
+
+// ---- testConvertSC16Q11NoDC ----
+
+static void testConvertSC16Q11NoDC(void) {
+    fprintf(stderr, "=== testConvertSC16Q11NoDC ===\n");
+
+    struct converter_state state = {0};
+
+    // Zero input: I=0, Q=0 -> magnitude 0
+    {
+        int16_t iq[2] = {0, 0};
+        uint16_t mag[1] = {0};
+        convert_sc16q11_nodc(iq, mag, 1, &state, NULL, NULL);
+        ASSERT_EQ_INT("Q11 zero", mag[0], 0);
+    }
+
+    // Max I: fI = 2048/2048 = 1.0, magsq = 1.0 (clamped), mag = 65535
+    {
+        int16_t iq_raw[2];
+        iq_raw[0] = htole16(2048);
+        iq_raw[1] = htole16(0);
+        uint16_t mag[1] = {0};
+        convert_sc16q11_nodc(iq_raw, mag, 1, &state, NULL, NULL);
+        ASSERT_NEAR_U16("Q11 max I", mag[0], 65535, 10);
+    }
+
+    // Equal IQ: fI=fQ=1024/2048=0.5, magsq=0.5, mag=0.707 -> 46340
+    {
+        int16_t iq_raw[2];
+        iq_raw[0] = htole16(1024);
+        iq_raw[1] = htole16(1024);
+        uint16_t mag[1] = {0};
+        convert_sc16q11_nodc(iq_raw, mag, 1, &state, NULL, NULL);
+        ASSERT_NEAR_U16("Q11 equal IQ", mag[0], 46340, 200);
+    }
+
+    // Negative max: fI = -2048/2048 = -1.0, mag = 65535
+    {
+        int16_t iq_raw[2];
+        iq_raw[0] = htole16(-2048);
+        iq_raw[1] = htole16(0);
+        uint16_t mag[1] = {0};
+        convert_sc16q11_nodc(iq_raw, mag, 1, &state, NULL, NULL);
+        ASSERT_NEAR_U16("Q11 neg max I", mag[0], 65535, 10);
+    }
+
+    fprintf(stderr, "testConvertSC16Q11NoDC: done\n\n");
+}
+
+// ---- testConvertSC16Q11Generic ----
+
+static void testConvertSC16Q11Generic(void) {
+    fprintf(stderr, "=== testConvertSC16Q11Generic ===\n");
+
+    // Constant DC offset: all I=1024, Q=1024 (Q11 format)
+    // fI = 1024/2048 = 0.5, fQ = 0.5
+    unsigned nsamples = 64;
+    int16_t iq_data[128];
+    for (unsigned i = 0; i < nsamples; i++) {
+        iq_data[2 * i] = htole16(1024);
+        iq_data[2 * i + 1] = htole16(1024);
+    }
+
+    struct converter_state state;
+    state.z1_I = 0;
+    state.z1_Q = 0;
+    state.dc_a = 0.5;
+    state.dc_b = 0.5;
+
+    uint16_t mag_data[64];
+    double mean_level = 0, mean_power = 0;
+
+    for (int batch = 0; batch < 200; batch++) {
+        convert_sc16q11_generic(iq_data, mag_data, nsamples, &state, &mean_level, &mean_power);
+    }
+
+    float expected_dc = 1024.0f / 2048.0f; // 0.5
+    ASSERT_FLOAT_NEAR("q11 gen z1_I", state.z1_I, expected_dc, 0.1);
+    ASSERT_FLOAT_NEAR("q11 gen z1_Q", state.z1_Q, expected_dc, 0.1);
+
+    fprintf(stderr, "testConvertSC16Q11Generic: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -332,6 +449,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testConvertSC16NoDC();
     testMagnitudeBounds();
     testInitConverter();
+    testConvertSC16Generic();
+    testConvertSC16Q11NoDC();
+    testConvertSC16Q11Generic();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

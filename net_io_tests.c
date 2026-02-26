@@ -170,6 +170,22 @@ static int failures = 0;
     } \
 } while(0)
 
+#define ASSERT_EQ_U32(tag, got, expected) do { \
+    uint32_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %u (0x%x), expected %u (0x%x)\n", tag, _g, _g, _e, _e); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_EQ_UINT8(tag, got, expected) do { \
+    uint8_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %u, expected %u\n", tag, (unsigned)_g, (unsigned)_e); \
+        failures++; \
+    } \
+} while(0)
+
 // ---- testIeee754Binary32LeToFloat ----
 
 static void testIeee754Binary32LeToFloat(void) {
@@ -333,6 +349,141 @@ static void testPrintHexDigit(void) {
     fprintf(stderr, "testPrintHexDigit: done\n\n");
 }
 
+// ---- testNetTimestamp ----
+
+static void testNetTimestamp(void) {
+    fprintf(stderr, "=== testNetTimestamp ===\n");
+
+    char buf[16];
+    char *p;
+
+    // No escaping: 0x112233445566
+    {
+        memset(buf, 0, sizeof(buf));
+        p = netTimestamp(buf, 0x112233445566LL);
+        ASSERT_INT_EQ("ts len no esc", (int)(p - buf), 6);
+        ASSERT_TRUE("ts byte0", (unsigned char)buf[0] == 0x11);
+        ASSERT_TRUE("ts byte1", (unsigned char)buf[1] == 0x22);
+        ASSERT_TRUE("ts byte2", (unsigned char)buf[2] == 0x33);
+        ASSERT_TRUE("ts byte3", (unsigned char)buf[3] == 0x44);
+        ASSERT_TRUE("ts byte4", (unsigned char)buf[4] == 0x55);
+        ASSERT_TRUE("ts byte5", (unsigned char)buf[5] == 0x66);
+    }
+
+    // With 0x1A in byte 1 position (bits 32-39): should be doubled
+    {
+        memset(buf, 0, sizeof(buf));
+        p = netTimestamp(buf, 0x001A33445566LL);
+        ASSERT_INT_EQ("ts len with esc", (int)(p - buf), 7);
+        ASSERT_TRUE("ts esc byte0", (unsigned char)buf[0] == 0x00);
+        ASSERT_TRUE("ts esc byte1", (unsigned char)buf[1] == 0x1A);
+        ASSERT_TRUE("ts esc byte2", (unsigned char)buf[2] == 0x1A); // doubled
+        ASSERT_TRUE("ts esc byte3", (unsigned char)buf[3] == 0x33);
+    }
+
+    // All zeros
+    {
+        memset(buf, 0xFF, sizeof(buf));
+        p = netTimestamp(buf, 0);
+        ASSERT_INT_EQ("ts len zeros", (int)(p - buf), 6);
+        for (int i = 0; i < 6; i++) {
+            ASSERT_TRUE("ts zero byte", (unsigned char)buf[i] == 0x00);
+        }
+    }
+
+    fprintf(stderr, "testNetTimestamp: done\n\n");
+}
+
+// ---- testReadPing ----
+
+static void testReadPing(void) {
+    fprintf(stderr, "=== testReadPing ===\n");
+
+    // Zero
+    {
+        char data[] = {0x00, 0x00, 0x00};
+        ASSERT_EQ_U32("ping zero", readPing(data), 0);
+    }
+
+    // Max 24-bit
+    {
+        char data[] = {(char)0xFF, (char)0xFF, (char)0xFF};
+        ASSERT_EQ_U32("ping max", readPing(data), 16777215);
+    }
+
+    // Known value 0x123456
+    {
+        char data[] = {0x12, 0x34, 0x56};
+        ASSERT_EQ_U32("ping known", readPing(data), 0x123456);
+    }
+
+    fprintf(stderr, "testReadPing: done\n\n");
+}
+
+// ---- testReadPingEscaped ----
+
+static void testReadPingEscaped(void) {
+    fprintf(stderr, "=== testReadPingEscaped ===\n");
+
+    // No escapes
+    {
+        char data[] = {0x12, 0x34, 0x56};
+        ASSERT_EQ_U32("ping esc none", readPingEscaped(data), 0x123456);
+    }
+
+    // Escape after first byte: {0x12, 0x1A, 0x34, 0x56}
+    // First byte: 0x12 -> res = 0x12 << 16
+    // Skip 0x1A, second byte: 0x34 -> res += 0x34 << 8
+    // Third byte: 0x56 -> res += 0x56
+    {
+        char data[] = {0x12, 0x1A, 0x34, 0x56};
+        ASSERT_EQ_U32("ping esc mid", readPingEscaped(data), 0x123456);
+    }
+
+    // First byte is 0x1A: {0x1A, 0x1A, 0x34, 0x1A, 0x56}
+    // First byte: 0x1A -> res = 0x1A << 16; skip next 0x1A
+    // Second byte: 0x34 -> res += 0x34 << 8
+    // Skip 0x1A, Third byte: 0x56 -> res += 0x56
+    {
+        char data[] = {0x1A, 0x1A, 0x34, 0x1A, 0x56};
+        ASSERT_EQ_U32("ping esc multi", readPingEscaped(data), 0x1A3456);
+    }
+
+    fprintf(stderr, "testReadPingEscaped: done\n\n");
+}
+
+// ---- testCharToAis ----
+
+static void testCharToAis(void) {
+    fprintf(stderr, "=== testCharToAis ===\n");
+
+    // '@' is index 0
+    ASSERT_EQ_UINT8("ais @", char_to_ais('@'), 0);
+
+    // 'A' is index 1
+    ASSERT_EQ_UINT8("ais A", char_to_ais('A'), 1);
+
+    // 'Z' is index 26
+    ASSERT_EQ_UINT8("ais Z", char_to_ais('Z'), 26);
+
+    // Space ' ' is index 32
+    ASSERT_EQ_UINT8("ais space", char_to_ais(' '), 32);
+
+    // '0' is index 48
+    ASSERT_EQ_UINT8("ais 0", char_to_ais('0'), 48);
+
+    // '?' is index 63 (last char)
+    ASSERT_EQ_UINT8("ais ?", char_to_ais('?'), 63);
+
+    // Unmapped: lowercase 'a' -> 32 (default)
+    ASSERT_EQ_UINT8("ais lowercase", char_to_ais('a'), 32);
+
+    // Null char -> 32 (explicit early return)
+    ASSERT_EQ_UINT8("ais null", char_to_ais(0), 32);
+
+    fprintf(stderr, "testCharToAis: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -340,6 +491,10 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testAirgroundEnumString();
     testHexDigitVal();
     testPrintHexDigit();
+    testNetTimestamp();
+    testReadPing();
+    testReadPingEscaped();
+    testCharToAis();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
