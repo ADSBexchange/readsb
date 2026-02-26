@@ -497,5 +497,117 @@ class TestBeastOutputFormat(unittest.TestCase):
                         "ICAO 1A1A1A not found after un-escaping Beast output")
 
 
+# ===================================================================
+# T: Beast Reduce Filter by Altitude
+# ===================================================================
+
+class TestBeastReduceFilterAlt(unittest.TestCase):
+    """Test --net-beast-reduce-filter-alt removes high aircraft."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inst = ReadsbInstance(
+            beast_in=True, beast_reduce=True,
+            extra_args=[
+                "--json-reliable", "1",
+                "--lat", "51.5", "--lon", "-0.1",
+                "--net-beast-reduce-filter-alt", "20000",
+            ],
+        )
+        cls.inst.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+
+    def test_t1_beast_reduce_filter_alt(self):
+        """Aircraft above filter altitude excluded from beast-reduce output."""
+        reduce_sock = socket.create_connection(
+            ("127.0.0.1", self.inst.beast_reduce_port), timeout=5
+        )
+        reduce_sock.settimeout(5)
+
+        beast_sock = socket.create_connection(
+            ("127.0.0.1", self.inst.beast_in_port), timeout=5
+        )
+
+        # Feed two aircraft:
+        # D00001 at 15000ft (below filter) — should appear in reduce
+        # D00002 at 35000ft (above filter) — should be excluded
+        ts = 100000
+        for batch in range(25):
+            lat = 51.5 + batch * 0.001
+            lon = -0.1 + batch * 0.001
+            # Low aircraft
+            even_low = make_df17_position("D00001", lat, lon, 15000, odd=0)
+            odd_low = make_df17_position("D00001", lat, lon, 15000, odd=1)
+            beast_sock.sendall(beast_frame(even_low, timestamp=ts))
+            ts += 500
+            beast_sock.sendall(beast_frame(odd_low, timestamp=ts))
+            ts += 500
+            # High aircraft
+            even_high = make_df17_position("D00002", lat + 1, lon + 1, 35000, odd=0)
+            odd_high = make_df17_position("D00002", lat + 1, lon + 1, 35000, odd=1)
+            beast_sock.sendall(beast_frame(even_high, timestamp=ts))
+            ts += 500
+            beast_sock.sendall(beast_frame(odd_high, timestamp=ts))
+            ts += 500
+            time.sleep(0.15)
+
+        # Collect output
+        time.sleep(2)
+        received = b""
+        try:
+            while True:
+                chunk = reduce_sock.recv(8192)
+                if not chunk:
+                    break
+                received += chunk
+        except socket.timeout:
+            pass
+
+        beast_sock.close()
+        reduce_sock.close()
+
+        # Parse Beast frames and extract ICAOs
+        icaos_seen = set()
+        i = 0
+        while i < len(received) - 1:
+            if received[i] == 0x1A:
+                if i + 1 < len(received) and received[i + 1] == 0x1A:
+                    i += 2
+                    continue
+                frame_type = received[i + 1]
+                if frame_type == ord('3'):
+                    # Extract payload un-escaping
+                    payload = bytearray()
+                    j = i + 2
+                    while j < len(received) and len(payload) < 6 + 1 + 14:
+                        if received[j] == 0x1A and j + 1 < len(received):
+                            if received[j + 1] == 0x1A:
+                                payload.append(0x1A)
+                                j += 2
+                                continue
+                            else:
+                                break
+                        payload.append(received[j])
+                        j += 1
+                    if len(payload) == 21:
+                        msg = payload[7:]
+                        icao = (msg[1] << 16) | (msg[2] << 8) | msg[3]
+                        icaos_seen.add(icao)
+                    i = j
+                else:
+                    i += 2
+            else:
+                i += 1
+
+        # The low aircraft should appear; the high aircraft should be filtered
+        self.assertIn(0xD00001, icaos_seen,
+                      "Low aircraft D00001 not found in reduce output")
+        self.assertNotIn(0xD00002, icaos_seen,
+                         "High aircraft D00002 should be filtered by alt limit")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

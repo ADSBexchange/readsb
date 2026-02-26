@@ -76,6 +76,13 @@ static int failures = 0;
     } \
 } while(0)
 
+#define ASSERT_TRUE(tag, cond) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "%s: FAIL\n", tag); \
+        failures++; \
+    } \
+} while(0)
+
 // ---- testDecodeID13Field ----
 
 static void testDecodeID13Field(void) {
@@ -366,6 +373,321 @@ static void testDecodeMovementFieldV2(void) {
     fprintf(stderr, "testDecodeMovementFieldV2: done\n\n");
 }
 
+// ---- setbits_me helper ----
+// Set bits [first..last] (1-indexed, MSB) in a 7-byte ME field to `value`.
+// Mirror of getbits/getbit bit numbering from mode_s.h.
+
+static void setbits_me(unsigned char *me, unsigned first, unsigned last, unsigned value) {
+    for (unsigned i = first; i <= last; i++) {
+        unsigned bi = i - 1;
+        unsigned by = bi >> 3;
+        unsigned mask = 1u << (7 - (bi & 7));
+        unsigned bit_pos = last - i; // bit position in value (0 = LSB)
+        if (value & (1u << bit_pos))
+            me[by] |= mask;
+        else
+            me[by] &= ~mask;
+    }
+}
+
+// ---- testDecodeESIdentAndCategory ----
+
+static void testDecodeESIdentAndCategory(void) {
+    fprintf(stderr, "=== testDecodeESIdentAndCategory ===\n");
+
+    // Test: encode "BAW256  " and verify decode
+    // AIS charset: '@'=0, 'A'=1, 'B'=2, ..., 'Z'=26, ' '=32, '0'=48, ..., '9'=57
+    // 'B'=2, 'A'=1, 'W'=23, '2'=50, '5'=53, '6'=54, ' '=32, ' '=32
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 4; // Aircraft ident, category set A
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        // ME bits 6-8: mesub
+        setbits_me(me, 6, 8, 1); // mesub = 1
+        // ME bits 9-14: char 0 = 'B' = 2
+        setbits_me(me, 9, 14, 2);
+        // ME bits 15-20: char 1 = 'A' = 1
+        setbits_me(me, 15, 20, 1);
+        // ME bits 21-26: char 2 = 'W' = 23
+        setbits_me(me, 21, 26, 23);
+        // ME bits 27-32: char 3 = '2' = 50
+        setbits_me(me, 27, 32, 50);
+        // ME bits 33-38: char 4 = '5' = 53
+        setbits_me(me, 33, 38, 53);
+        // ME bits 39-44: char 5 = '6' = 54
+        setbits_me(me, 39, 44, 54);
+        // ME bits 45-50: char 6 = ' ' = 32
+        setbits_me(me, 45, 50, 32);
+        // ME bits 51-56: char 7 = ' ' = 32
+        setbits_me(me, 51, 56, 32);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESIdentAndCategory(&mm);
+
+        ASSERT_EQ_INT("ident callsign_valid", mm.callsign_valid, 1);
+        ASSERT_TRUE("ident callsign BAW256",
+                     strncmp(mm.callsign, "BAW256  ", 8) == 0);
+        ASSERT_EQ_INT("ident mesub", mm.mesub, 1);
+        // category = ((0x0E - metype) << 4) | mesub = ((14-4)<<4)|1 = 0xA1
+        ASSERT_EQ_UINT("ident category", mm.category, 0xA1);
+        ASSERT_EQ_INT("ident category_valid", mm.category_valid, 1);
+    }
+
+    // Test: all spaces is valid
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 1;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0); // mesub = 0
+        for (int i = 0; i < 8; i++)
+            setbits_me(me, 9 + i * 6, 14 + i * 6, 32); // ' '
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESIdentAndCategory(&mm);
+        ASSERT_EQ_INT("ident allspace valid", mm.callsign_valid, 1);
+    }
+
+    // Test: invalid char (index 0 = '@') is still technically valid per the function
+    // '@' is in the valid char list: callsign[i] == '@'
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 2;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1);
+        // All chars set to '@' (index 0)
+        for (int i = 0; i < 8; i++)
+            setbits_me(me, 9 + i * 6, 14 + i * 6, 0);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESIdentAndCategory(&mm);
+        // '@' is in the valid char list
+        ASSERT_EQ_INT("ident at_sign valid", mm.callsign_valid, 1);
+    }
+
+    fprintf(stderr, "testDecodeESIdentAndCategory: done\n\n");
+}
+
+// ---- testDecodeESAirborneVelocity_ground ----
+
+static void testDecodeESAirborneVelocity_ground(void) {
+    fprintf(stderr, "=== testDecodeESAirborneVelocity_ground ===\n");
+
+    // Subtype 1: E/W = 100kt east, N/S = 100kt north
+    // gs = sqrt(100^2 + 100^2) ~ 141.4 kt, track ~ 45 deg
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        // ME bits 6-8: mesub = 1 (subsonic ground speed)
+        setbits_me(me, 6, 8, 1);
+        // ME bits 11-13: NACv = 2
+        setbits_me(me, 11, 13, 2);
+        // ME bit 14: E/W direction = 0 (east)
+        setbits_me(me, 14, 14, 0);
+        // ME bits 15-24: E/W speed = 101 (raw: speed+1 = 100kt -> 101)
+        setbits_me(me, 15, 24, 101);
+        // ME bit 25: N/S direction = 0 (north)
+        setbits_me(me, 25, 25, 0);
+        // ME bits 26-35: N/S speed = 101 (raw: speed+1 = 100kt -> 101)
+        setbits_me(me, 26, 35, 101);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("vel gs_valid", mm.gs_valid, 1);
+        ASSERT_FLOAT_NEAR("vel gs ~141", mm.gs.selected, 141.4f, 1.5f);
+        ASSERT_EQ_INT("vel heading_valid", mm.heading_valid, 1);
+        ASSERT_FLOAT_NEAR("vel track ~45", mm.heading, 45.0f, 1.0f);
+    }
+
+    // Subtype 1: pure south (E/W=0, N/S=200 south) -> track=180, gs=200
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1); // mesub = 1
+        // E/W speed = 0 (raw 0 means no info, but we need raw=1 for 0kt)
+        // Actually raw=0 means "not available" and the function checks ew_raw && ns_raw
+        // So we need raw=1 for 0kt: (1-1)*dir = 0
+        setbits_me(me, 14, 14, 0); // E/W direction
+        setbits_me(me, 15, 24, 1); // E/W speed = 1 (0 kt)
+        setbits_me(me, 25, 25, 1); // N/S direction = 1 (south)
+        setbits_me(me, 26, 35, 201); // N/S speed = 201 (200 kt south)
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("vel south gs_valid", mm.gs_valid, 1);
+        ASSERT_FLOAT_NEAR("vel south gs", mm.gs.selected, 200.0f, 1.5f);
+        ASSERT_EQ_INT("vel south heading_valid", mm.heading_valid, 1);
+        ASSERT_FLOAT_NEAR("vel south track", mm.heading, 180.0f, 1.0f);
+    }
+
+    // Subtype 2: supersonic (4x multiplier)
+    // E/W = 400kt east (raw 101), N/S = 0kt (raw 1)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 2); // mesub = 2 (supersonic)
+        setbits_me(me, 14, 14, 0); // E/W direction = east
+        setbits_me(me, 15, 24, 101); // raw 101 -> (101-1)*4 = 400kt
+        setbits_me(me, 25, 25, 0); // N/S direction = north
+        setbits_me(me, 26, 35, 1); // raw 1 -> (1-1)*4 = 0kt
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("vel supersonic gs_valid", mm.gs_valid, 1);
+        ASSERT_FLOAT_NEAR("vel supersonic gs", mm.gs.selected, 400.0f, 1.5f);
+        ASSERT_FLOAT_NEAR("vel supersonic track", mm.heading, 90.0f, 1.0f);
+    }
+
+    fprintf(stderr, "testDecodeESAirborneVelocity_ground: done\n\n");
+}
+
+// ---- testDecodeESAirborneVelocity_airspeed ----
+
+static void testDecodeESAirborneVelocity_airspeed(void) {
+    fprintf(stderr, "=== testDecodeESAirborneVelocity_airspeed ===\n");
+
+    // Subtype 3: heading = 180 deg, IAS = 300
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 3); // mesub = 3 (airspeed)
+        // ME bit 14: heading status = 1 (valid)
+        setbits_me(me, 14, 14, 1);
+        // ME bits 15-24: heading = 512 (180 deg = 512/1024 * 360)
+        setbits_me(me, 15, 24, 512);
+        // ME bit 25: airspeed type = 0 (IAS)
+        setbits_me(me, 25, 25, 0);
+        // ME bits 26-35: airspeed = 301 (300 kt: raw-1 = 300)
+        setbits_me(me, 26, 35, 301);
+        // ME bit 36: vert rate source = 1 (baro)
+        setbits_me(me, 36, 36, 1);
+        // ME bit 37: vert rate sign = 0 (up)
+        setbits_me(me, 37, 37, 0);
+        // ME bits 38-46: vert rate = 33 -> (33-1)*64 = 2048 fpm
+        setbits_me(me, 38, 46, 33);
+        // ME bit 49: geom delta sign = 0 (positive)
+        setbits_me(me, 49, 49, 0);
+        // ME bits 50-56: geom delta = 11 -> (11-1)*25 = 250 ft
+        setbits_me(me, 50, 56, 11);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("airspeed heading_valid", mm.heading_valid, 1);
+        ASSERT_FLOAT_NEAR("airspeed heading 180", mm.heading, 180.0f, 0.5f);
+        ASSERT_EQ_INT("airspeed ias_valid", mm.ias_valid, 1);
+        ASSERT_EQ_UINT("airspeed ias 300", mm.ias, 300);
+        ASSERT_EQ_INT("airspeed baro_rate_valid", mm.baro_rate_valid, 1);
+        ASSERT_EQ_INT("airspeed baro_rate 2048", mm.baro_rate, 2048);
+        ASSERT_EQ_INT("airspeed geom_delta_valid", mm.geom_delta_valid, 1);
+        ASSERT_EQ_INT("airspeed geom_delta 250", mm.geom_delta, 250);
+    }
+
+    // Subtype 3: TAS flag (bit 25 = 1)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 3);
+        setbits_me(me, 25, 25, 1); // TAS flag
+        setbits_me(me, 26, 35, 251); // 250 kt TAS
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("tas flag valid", mm.tas_valid, 1);
+        ASSERT_EQ_UINT("tas value 250", mm.tas, 250);
+        ASSERT_EQ_INT("tas ias not valid", mm.ias_valid, 0);
+    }
+
+    // Invalid subtype (0) -> no fields set
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0); // invalid subtype
+        setbits_me(me, 15, 24, 101);
+        setbits_me(me, 26, 35, 101);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("invalid sub gs_valid", mm.gs_valid, 0);
+        ASSERT_EQ_INT("invalid sub heading_valid", mm.heading_valid, 0);
+    }
+
+    // Invalid subtype (5) -> no fields set
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 5); // invalid subtype
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("sub5 gs_valid", mm.gs_valid, 0);
+    }
+
+    // Negative vert rate (sign bit set)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 19;
+
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 3);
+        setbits_me(me, 36, 36, 0); // geom rate source
+        setbits_me(me, 37, 37, 1); // sign = down
+        setbits_me(me, 38, 46, 17); // rate = (17-1)*(-64) = -1024
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirborneVelocity(&mm, 0);
+
+        ASSERT_EQ_INT("neg vrate geom_rate_valid", mm.geom_rate_valid, 1);
+        ASSERT_EQ_INT("neg vrate -1024", mm.geom_rate, -1024);
+    }
+
+    fprintf(stderr, "testDecodeESAirborneVelocity_airspeed: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -376,6 +698,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDecodeAC12Field();
     testDecodeMovementFieldV0();
     testDecodeMovementFieldV2();
+    testDecodeESIdentAndCategory();
+    testDecodeESAirborneVelocity_ground();
+    testDecodeESAirborneVelocity_airspeed();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

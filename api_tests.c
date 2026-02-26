@@ -26,11 +26,22 @@ struct _Threads Threads;
 void setExit(int __attribute__((unused)) arg) { }
 int64_t mstime(void) { return 1700000000000LL; }
 int64_t microtime(void) { return 1700000000000000LL; }
-double greatcircle(double __attribute__((unused)) lat0, double __attribute__((unused)) lon0,
-                   double __attribute__((unused)) lat1, double __attribute__((unused)) lon1,
-                   int __attribute__((unused)) approx) { return 0; }
-double bearing(double __attribute__((unused)) lat0, double __attribute__((unused)) lon0,
-               double __attribute__((unused)) lat1, double __attribute__((unused)) lon1) { return 0; }
+double greatcircle(double lat0, double lon0, double lat1, double lon1,
+                   int __attribute__((unused)) approx) {
+    // equirectangular approximation — good enough for unit test distances
+    double x = (lon1 - lon0) * cos((lat0 + lat1) * M_PI / 360.0) * 111319.9;
+    double y = (lat1 - lat0) * 111319.9;
+    return sqrt(x * x + y * y);
+}
+double bearing(double lat0, double lon0, double lat1, double lon1) {
+    double dlon = (lon1 - lon0) * M_PI / 180.0;
+    double y = sin(dlon) * cos(lat1 * M_PI / 180.0);
+    double x = cos(lat0 * M_PI / 180.0) * sin(lat1 * M_PI / 180.0)
+             - sin(lat0 * M_PI / 180.0) * cos(lat1 * M_PI / 180.0) * cos(dlon);
+    double brng = atan2(y, x) * 180.0 / M_PI;
+    if (brng < 0) brng += 360.0;
+    return brng;
+}
 struct aircraft *aircraftGet(uint32_t __attribute__((unused)) addr) { return NULL; }
 int receiverPositionReceived(struct aircraft __attribute__((unused)) *a,
                              struct modesMessage __attribute__((unused)) *mm,
@@ -505,6 +516,147 @@ static void testFindInBox(void) {
     fprintf(stderr, "testFindInBox: done\n\n");
 }
 
+// ---- testFindInCircle ----
+
+static void testFindInCircle(void) {
+    fprintf(stderr, "=== testFindInCircle ===\n");
+
+    // 3 aircraft: London, Paris, Berlin
+    struct apiEntry entries[3];
+    memset(entries, 0, sizeof(entries));
+
+    // London: 51.5, -0.1
+    entries[0].bin.lat = (int32_t)(51.5 * 1E6);
+    entries[0].bin.lon = (int32_t)(-0.1 * 1E6);
+    entries[0].bin.position_valid = 1;
+    entries[0].bin.hex = 0xAA0001;
+
+    // Paris: 48.85, 2.35
+    entries[1].bin.lat = (int32_t)(48.85 * 1E6);
+    entries[1].bin.lon = (int32_t)(2.35 * 1E6);
+    entries[1].bin.position_valid = 1;
+    entries[1].bin.hex = 0xAA0002;
+
+    // Berlin: 52.52, 13.40
+    entries[2].bin.lat = (int32_t)(52.52 * 1E6);
+    entries[2].bin.lon = (int32_t)(13.40 * 1E6);
+    entries[2].bin.position_valid = 1;
+    entries[2].bin.hex = 0xAA0003;
+
+    // Sort by lon (required for findLonRange used internally)
+    qsort(entries, 3, sizeof(struct apiEntry), compareLon);
+
+    struct apiEntry matches[3];
+    struct apiOptions options;
+    size_t alloc;
+
+    // Circle at London, 500km radius — should find London + Paris (~340km), not Berlin (~930km)
+    memset(&options, 0, sizeof(options));
+    options.circle.lat = 51.5;
+    options.circle.lon = -0.1;
+    options.circle.radius = 500000; // 500km in meters
+    options.circle.onlyClosest = false;
+    options.is_circle = 1;
+    alloc = 0;
+    int count = findInCircle(entries, 3, &options, matches, &alloc);
+    ASSERT_INT_EQ("circle 500km count", count, 2);
+
+    // onlyClosest — should return exactly 1 (London itself, ~0km)
+    memset(&options, 0, sizeof(options));
+    options.circle.lat = 51.5;
+    options.circle.lon = -0.1;
+    options.circle.radius = 500000;
+    options.circle.onlyClosest = true;
+    options.is_circle = 1;
+    alloc = 0;
+    count = findInCircle(entries, 3, &options, matches, &alloc);
+    ASSERT_INT_EQ("circle closest count", count, 1);
+    ASSERT_TRUE("circle closest small dist", matches[0].distance < 50000); // London is close
+
+    // Tiny radius — should find nothing
+    memset(&options, 0, sizeof(options));
+    options.circle.lat = 0.0;
+    options.circle.lon = 0.0;
+    options.circle.radius = 1000; // 1km
+    options.circle.onlyClosest = false;
+    options.is_circle = 1;
+    alloc = 0;
+    count = findInCircle(entries, 3, &options, matches, &alloc);
+    ASSERT_INT_EQ("circle tiny count", count, 0);
+
+    // Large radius centered at London — should find all 3
+    memset(&options, 0, sizeof(options));
+    options.circle.lat = 51.5;
+    options.circle.lon = -0.1;
+    options.circle.radius = 1500000; // 1500km
+    options.circle.onlyClosest = false;
+    options.is_circle = 1;
+    alloc = 0;
+    count = findInCircle(entries, 3, &options, matches, &alloc);
+    ASSERT_INT_EQ("circle 1500km count", count, 3);
+
+    fprintf(stderr, "testFindInCircle: done\n\n");
+}
+
+// ---- testParseDoubles ----
+
+static void testParseDoubles(void) {
+    fprintf(stderr, "=== testParseDoubles ===\n");
+
+    double results[10];
+
+    // Normal 4 values (box coordinates)
+    {
+        char buf[] = "51.5,-0.1,52.0,0.5";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd 4vals count", count, 4);
+        ASSERT_TRUE("pd val0", fabs(results[0] - 51.5) < 0.001);
+        ASSERT_TRUE("pd val1", fabs(results[1] - (-0.1)) < 0.001);
+        ASSERT_TRUE("pd val2", fabs(results[2] - 52.0) < 0.001);
+        ASSERT_TRUE("pd val3", fabs(results[3] - 0.5) < 0.001);
+    }
+
+    // Single value
+    {
+        char buf[] = "42.5";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd single count", count, 1);
+        ASSERT_TRUE("pd single val", fabs(results[0] - 42.5) < 0.001);
+    }
+
+    // Negative values
+    {
+        char buf[] = "-33.9,-74.01";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd neg count", count, 2);
+        ASSERT_TRUE("pd neg val0", fabs(results[0] - (-33.9)) < 0.001);
+        ASSERT_TRUE("pd neg val1", fabs(results[1] - (-74.01)) < 0.001);
+    }
+
+    // Too many values -> -1
+    {
+        char buf[] = "1,2,3,4,5";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd too many", count, -1);
+    }
+
+    // Invalid chars -> -1
+    {
+        char buf[] = "51.5,abc";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd invalid", count, -1);
+    }
+
+    // Empty string -> 0
+    {
+        char buf[] = "";
+        int count = parseDoubles(buf, buf + strlen(buf), results, 4);
+        ASSERT_INT_EQ("pd empty", count, 0);
+    }
+
+    fprintf(stderr, "testParseDoubles: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -518,6 +670,8 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testFilterSquawk();
     testFilterCallsign();
     testFindInBox();
+    testFindInCircle();
+    testParseDoubles();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

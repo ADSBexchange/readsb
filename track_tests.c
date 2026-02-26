@@ -2,168 +2,149 @@
 //
 // track_tests.c - unit tests for static functions in track.c
 //
-// Copies the small pure static functions from track.c to avoid pulling in
-// the entire track.c dependency graph. Tests: compute_nic, compute_rc,
-// altitude_to_feet, addressReliable, simpleHash.
+// Uses #include "track.c" to access static functions directly.
+// Provides linker stubs for external symbols that track.c references
+// but that we don't exercise in the tests.
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdatomic.h>
 
 #include "readsb.h"
 
-// Linker stubs
+// ---- Linker stubs ----
+
 struct _Modes Modes;
-void setExit(int __attribute__((unused)) arg) { }
+struct _Threads Threads;
 uint32_t modeAC_count[4096];
 uint32_t modeAC_match[4096];
 
-// ---- Copied static functions from track.c ----
+void setExit(int __attribute__((unused)) arg) { }
+int64_t mstime(void) { return 1700000000000LL; }
 
-#define RC_UNKNOWN 0
+// aircraft.c stubs
+// Return static dummy to avoid -O2 NULL-dereference warnings from inlined code
+static struct aircraft dummy_aircraft;
+struct aircraft *aircraftCreate(uint32_t __attribute__((unused)) addr) { return &dummy_aircraft; }
+struct aircraft *aircraftGet(uint32_t __attribute__((unused)) addr) { return &dummy_aircraft; }
+void freeAircraft(struct aircraft __attribute__((unused)) *a) { }
+void quickInit(void) { }
 
-static uint16_t simpleHash(uint64_t receiverId) {
-    uint16_t simpleHash = receiverId;
-    simpleHash ^= (uint16_t) (receiverId >> 16);
-    simpleHash ^= (uint16_t) (receiverId >> 32);
-    simpleHash ^= (uint16_t) (receiverId >> 48);
-    if (simpleHash == 0)
-        return 1;
-    return simpleHash;
+// cpr.c stubs
+int decodeCPRairborne(int __attribute__((unused)) even_cprlat,
+                      int __attribute__((unused)) even_cprlon,
+                      int __attribute__((unused)) odd_cprlat,
+                      int __attribute__((unused)) odd_cprlon,
+                      int __attribute__((unused)) fflag,
+                      double __attribute__((unused)) *out_lat,
+                      double __attribute__((unused)) *out_lon) { return -1; }
+int decodeCPRsurface(double __attribute__((unused)) reflat,
+                     double __attribute__((unused)) reflon,
+                     int __attribute__((unused)) even_cprlat,
+                     int __attribute__((unused)) even_cprlon,
+                     int __attribute__((unused)) odd_cprlat,
+                     int __attribute__((unused)) odd_cprlon,
+                     int __attribute__((unused)) fflag,
+                     double __attribute__((unused)) *out_lat,
+                     double __attribute__((unused)) *out_lon) { return -1; }
+int decodeCPRrelative(double __attribute__((unused)) reflat,
+                      double __attribute__((unused)) reflon,
+                      int __attribute__((unused)) cprlat,
+                      int __attribute__((unused)) cprlon,
+                      int __attribute__((unused)) fflag,
+                      int __attribute__((unused)) surface,
+                      double __attribute__((unused)) *out_lat,
+                      double __attribute__((unused)) *out_lon) { return -1; }
+
+// globe_index.c stubs
+int globe_index(double __attribute__((unused)) lat_in,
+                double __attribute__((unused)) lon_in) { return 0; }
+void set_globe_index(struct aircraft __attribute__((unused)) *a,
+                     int __attribute__((unused)) new_index) { }
+void ca_lock_read(struct craftArray __attribute__((unused)) *ca) { }
+void ca_unlock_read(struct craftArray __attribute__((unused)) *ca) { }
+void ca_add(struct craftArray __attribute__((unused)) *ca,
+            struct aircraft __attribute__((unused)) *a) { }
+int traceAdd(struct aircraft __attribute__((unused)) *a,
+             struct modesMessage __attribute__((unused)) *mm,
+             int64_t __attribute__((unused)) now,
+             int __attribute__((unused)) stale) { return 0; }
+void traceMaintenance(struct aircraft __attribute__((unused)) *a,
+                      int64_t __attribute__((unused)) now,
+                      threadpool_buffer_t __attribute__((unused)) *passbuffer) { }
+int traceUsePosBuffered(struct aircraft __attribute__((unused)) *a) { return 0; }
+
+// receiver.c stubs
+struct receiver *receiverBad(uint64_t __attribute__((unused)) id,
+                             uint32_t __attribute__((unused)) addr,
+                             int64_t __attribute__((unused)) now) { return NULL; }
+struct receiver *receiverGetReference(uint64_t __attribute__((unused)) id,
+                                      double __attribute__((unused)) *lat,
+                                      double __attribute__((unused)) *lon,
+                                      struct aircraft __attribute__((unused)) *a,
+                                      int __attribute__((unused)) noDebug) { return NULL; }
+int receiverPositionReceived(struct aircraft __attribute__((unused)) *a,
+                             struct modesMessage __attribute__((unused)) *mm,
+                             double __attribute__((unused)) lat,
+                             double __attribute__((unused)) lon,
+                             int64_t __attribute__((unused)) now) { return 0; }
+
+// json_out.c stubs
+int includeAircraftJson(int64_t __attribute__((unused)) now,
+                        struct aircraft __attribute__((unused)) *a) { return 0; }
+void logACASInfoShort(uint32_t __attribute__((unused)) addr,
+                      unsigned char __attribute__((unused)) *MV,
+                      struct aircraft __attribute__((unused)) *a,
+                      struct modesMessage __attribute__((unused)) *mm,
+                      int64_t __attribute__((unused)) now) { }
+
+// mode_s.c stubs
+void displayModesMessage(struct modesMessage __attribute__((unused)) *mm) { }
+unsigned modeCToModeA(int __attribute__((unused)) modeC) { return 0; }
+
+// comm_b.c stubs
+int checkAcasRaValid(unsigned char __attribute__((unused)) *MV,
+                     struct modesMessage __attribute__((unused)) *mm,
+                     int __attribute__((unused)) debug) { return 0; }
+
+// util.c stubs
+double greatcircle(double __attribute__((unused)) lat0,
+                   double __attribute__((unused)) lon0,
+                   double __attribute__((unused)) lat1,
+                   double __attribute__((unused)) lon1,
+                   int __attribute__((unused)) approx) { return 0; }
+double bearing(double __attribute__((unused)) lat0,
+               double __attribute__((unused)) lon0,
+               double __attribute__((unused)) lat1,
+               double __attribute__((unused)) lon1) { return 0; }
+char *sprint_uuid1(uint64_t __attribute__((unused)) id1, char *p) { return p; }
+
+// geomag.c stubs
+int geomag_calc(double __attribute__((unused)) alt,
+                double __attribute__((unused)) glat,
+                double __attribute__((unused)) glon,
+                double __attribute__((unused)) time,
+                double *dec, double *dip,
+                double *ti, double *gv) {
+    if (dec) *dec = 0;
+    if (dip) *dip = 0;
+    if (ti) *ti = 0;
+    if (gv) *gv = 0;
+    return 1;
 }
 
-static unsigned compute_nic(unsigned metype, unsigned version, unsigned nic_a, unsigned nic_b, unsigned nic_c) {
-    (void)nic_b; // used in some cases below via the original parameter name
-    switch (metype) {
-        case 5: case 9: case 20:
-            return 11;
-        case 6: case 10: case 21:
-            return 10;
-        case 7:
-            if (version == 2) {
-                if (nic_a && !nic_c) return 9;
-                else return 8;
-            } else if (version == 1) {
-                if (nic_a) return 9;
-                else return 8;
-            } else {
-                return 8;
-            }
-        case 8:
-            if (version == 2) {
-                if (nic_a && nic_c) return 7;
-                else if (nic_a && !nic_c) return 6;
-                else if (!nic_a && nic_c) return 6;
-                else return 0;
-            } else {
-                return 0;
-            }
-        case 11:
-            if (version == 2) {
-                if (nic_a && nic_b) return 9;
-                else return 8;
-            } else if (version == 1) {
-                if (nic_a) return 9;
-                else return 8;
-            } else {
-                return 8;
-            }
-        case 12: return 7;
-        case 13: return 6;
-        case 14: return 5;
-        case 15: return 4;
-        case 16:
-            if (nic_a && nic_b) return 3;
-            else return 2;
-        case 17: return 1;
-        default: return 0;
-    }
-}
+// threadpool.c stubs
+void threadpool_run(threadpool_t __attribute__((unused)) *pool,
+                    threadpool_task_t __attribute__((unused)) *tasks,
+                    uint32_t __attribute__((unused)) count) { }
 
-static unsigned compute_rc(unsigned metype, unsigned version, unsigned nic_a, unsigned nic_b, unsigned nic_c) {
-    switch (metype) {
-        case 5: case 9: case 20:
-            return 8;
-        case 6: case 10: case 21:
-            return 25;
-        case 7:
-            if (version == 2) {
-                if (nic_a && !nic_c) return 75;
-                else return 186;
-            } else if (version == 1) {
-                if (nic_a) return 75;
-                else return 186;
-            } else {
-                return 186;
-            }
-        case 8:
-            if (version == 2) {
-                if (nic_a && nic_c) return 371;
-                else if (nic_a && !nic_c) return 556;
-                else if (!nic_a && nic_c) return 926;
-                else return RC_UNKNOWN;
-            } else {
-                return RC_UNKNOWN;
-            }
-        case 11:
-            if (version == 2) {
-                if (nic_a && nic_b) return 75;
-                else return 186;
-            } else if (version == 1) {
-                if (nic_a) return 75;
-                else return 186;
-            } else {
-                return 186;
-            }
-        case 12: return 371;
-        case 13:
-            if (version == 2) {
-                if (!nic_a && nic_b) return 556;
-                else if (!nic_a && !nic_b) return 926;
-                else if (nic_a && nic_b) return 1112;
-                else return RC_UNKNOWN;
-            } else if (version == 1) {
-                if (nic_a) return 1112;
-                else return 926;
-            } else {
-                return 926;
-            }
-        case 14: return 1852;
-        case 15: return 3704;
-        case 16:
-            if (version == 2) {
-                if (nic_a && nic_b) return 7408;
-                else return 14816;
-            } else if (version == 1) {
-                if (nic_a) return 7408;
-                else return 14816;
-            } else {
-                return 18520;
-            }
-        case 17: return 37040;
-        default: return RC_UNKNOWN;
-    }
-}
-
-static int altitude_to_feet(int raw, altitude_unit_t unit) {
-    switch (unit) {
-        case UNIT_METERS:
-            return raw / 0.3048;
-        case UNIT_FEET:
-            return raw;
-        default:
-            return 0;
-    }
-}
-
-static int addressReliable(struct modesMessage *mm) {
-    if (mm->msgtype == 17 || mm->msgtype == 18 || (mm->msgtype == 11 && mm->IID == 0) || mm->sbs_in) {
-        return 1;
-    }
-    return 0;
-}
+// ---- Include track.c to access static functions ----
+#include "track.c"
 
 // ---- test helpers ----
 
@@ -188,6 +169,13 @@ static int failures = 0;
 #define ASSERT_TRUE(tag, cond) do { \
     if (!(cond)) { \
         fprintf(stderr, "%s: FAIL\n", tag); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_STR_EQ(tag, got, expected) do { \
+    if (strcmp((got), (expected)) != 0) { \
+        fprintf(stderr, "%s: FAIL: got \"%s\", expected \"%s\"\n", tag, (got), (expected)); \
         failures++; \
     } \
 } while(0)
@@ -427,6 +415,28 @@ static void testSimpleHash(void) {
     fprintf(stderr, "testSimpleHash: done\n\n");
 }
 
+// ---- testSourceString ----
+
+static void testSourceString(void) {
+    fprintf(stderr, "=== testSourceString ===\n");
+
+    ASSERT_STR_EQ("src INVALID", source_string(SOURCE_INVALID), "INVALID ");
+    ASSERT_STR_EQ("src INDIRECT", source_string(SOURCE_INDIRECT), "INDIRECT");
+    ASSERT_STR_EQ("src MODE_AC", source_string(SOURCE_MODE_AC), "MODE_AC ");
+    ASSERT_STR_EQ("src SBS", source_string(SOURCE_SBS), "SBS     ");
+    ASSERT_STR_EQ("src MLAT", source_string(SOURCE_MLAT), "MLAT    ");
+    ASSERT_STR_EQ("src MODE_S", source_string(SOURCE_MODE_S), "MODE_S  ");
+    ASSERT_STR_EQ("src JAERO", source_string(SOURCE_JAERO), "JAERO   ");
+    ASSERT_STR_EQ("src MODE_CH", source_string(SOURCE_MODE_S_CHECKED), "MODE_CH ");
+    ASSERT_STR_EQ("src TISB", source_string(SOURCE_TISB), "TISB    ");
+    ASSERT_STR_EQ("src ADSR", source_string(SOURCE_ADSR), "ADSR    ");
+    ASSERT_STR_EQ("src ADSB", source_string(SOURCE_ADSB), "ADSB    ");
+    ASSERT_STR_EQ("src PRIO", source_string(SOURCE_PRIO), "PRIO    ");
+    ASSERT_STR_EQ("src default", source_string(99), "ERROR   ");
+
+    fprintf(stderr, "testSourceString: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -435,6 +445,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testAltitudeToFeet();
     testAddressReliable();
     testSimpleHash();
+    testSourceString();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

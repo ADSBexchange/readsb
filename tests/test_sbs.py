@@ -145,6 +145,18 @@ class TestSbsToJson(unittest.TestCase):
         self.assertEqual(squawk_val, "4521",
                          f"Expected squawk '4521', got {squawk_val!r}")
 
+    def test_a7_ground_status(self):
+        """MSG,3 with alt=0 -> aircraft appears in JSON (ground-level path)."""
+        self._feed([
+            sbs_msg3("A70000", alt=0, lat=51.47, lon=-0.46),
+            sbs_msg3("A70000", alt=0, lat=51.47, lon=-0.46),
+        ])
+        data = poll_aircraft_json(self.inst.tmpdir, want_hex="a70000")
+        self.assertIsNotNone(data, "aircraft.json never contained a70000")
+        ac = {a["hex"]: a for a in data["aircraft"]}
+        self.assertIn("a70000", ac)
+        self.assertEqual(ac["a70000"]["alt_baro"], 0)
+
 
 # ===================================================================
 # B: SBS Input -> SBS Output
