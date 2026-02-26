@@ -1,8 +1,10 @@
 // Part of readsb, a Mode-S/ADSB/TIS message decoder.
 //
-// stats_tests.c - unit tests for pure functions from stats.c
+// stats_tests.c - unit tests for functions in stats.c
 //
-// Copies small pure functions to avoid the massive stub surface of linking stats.o.
+// Uses #include "stats.c" to access static functions directly.
+// Provides linker stubs for external symbols that stats.c references
+// but that we don't exercise in the tests.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,74 +12,35 @@
 #include <math.h>
 #include <time.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #include "readsb.h"
 
-// Linker stubs
+// ---- Linker stubs ----
+
 struct _Modes Modes;
-void setExit(int __attribute__((unused)) arg) { }
+struct _Threads Threads;
 uint32_t modeAC_count[4096];
 uint32_t modeAC_match[4096];
+void setExit(int __attribute__((unused)) arg) { }
+int64_t mstime(void) { return 1700000000000LL; }
 
-// ---- Copied pure functions from stats.c ----
-
-static void test_add_timespecs(const struct timespec *x, const struct timespec *y, struct timespec *z) {
-    z->tv_sec = x->tv_sec + y->tv_sec;
-    z->tv_nsec = x->tv_nsec + y->tv_nsec;
-    z->tv_sec += z->tv_nsec / 1000000000L;
-    z->tv_nsec = z->tv_nsec % 1000000000L;
+int64_t roundSeconds(int __attribute__((unused)) interval,
+                     int __attribute__((unused)) offset,
+                     int64_t __attribute__((unused)) epoch_ms) { return 0; }
+struct char_buffer writeJsonToFile(const char __attribute__((unused)) *dir,
+                                   const char __attribute__((unused)) *file,
+                                   struct char_buffer __attribute__((unused)) cb) {
+    return (struct char_buffer){0};
 }
 
-static void test_reset_stats(struct stats *st) {
-    static struct stats st_zero;
-    *st = st_zero;
-    st->distance_min = 2E42;
-}
+// stubs for statsCountAircraft dependencies
+struct aircraft *aircraftGet(uint32_t __attribute__((unused)) addr) { return NULL; }
+void quickInit(void) { }
 
-static void test_add_stats_partial(const struct stats *st1, const struct stats *st2, struct stats *target) {
-    // Test the key logic paths of add_stats: start, end, additive fields, peak_signal_power, distance_min
-    if (st1->start == 0)
-        target->start = st2->start;
-    else if (st2->start == 0)
-        target->start = st1->start;
-    else if (st1->start < st2->start)
-        target->start = st1->start;
-    else
-        target->start = st2->start;
+// ---- Include source under test ----
 
-    target->end = st1->end > st2->end ? st1->end : st2->end;
-
-    target->messages_total = st1->messages_total + st2->messages_total;
-    target->demod_preambles = st1->demod_preambles + st2->demod_preambles;
-    target->unique_aircraft = st1->unique_aircraft + st2->unique_aircraft;
-
-    if (st1->peak_signal_power > st2->peak_signal_power)
-        target->peak_signal_power = st1->peak_signal_power;
-    else
-        target->peak_signal_power = st2->peak_signal_power;
-
-    target->distance_max = st1->distance_max > st2->distance_max ? st1->distance_max : st2->distance_max;
-    target->distance_min = st1->distance_min < st2->distance_min ? st1->distance_min : st2->distance_min;
-}
-
-static float test_percentile(float p, float *values, int len) {
-    float x = p * (len - 1);
-    float d = x - ((int) x);
-    int index = (int) x;
-
-    float res;
-    if (index + 1 < len)
-        res = values[index] + d * (values[index + 1] - values[index]);
-    else
-        res = values[index];
-    return res;
-}
-
-static int test_compareFloat(const void *p1, const void *p2) {
-    float a1 = *(const float *) p1;
-    float a2 = *(const float *) p2;
-    return (a1 > a2) - (a1 < a2);
-}
+#include "stats.c"
 
 // ---- test helpers ----
 
@@ -132,28 +95,28 @@ static void testAddTimespecs(void) {
     // Simple seconds addition
     x = (struct timespec){.tv_sec = 1, .tv_nsec = 0};
     y = (struct timespec){.tv_sec = 2, .tv_nsec = 0};
-    test_add_timespecs(&x, &y, &z);
+    add_timespecs(&x, &y, &z);
     ASSERT_EQ_I64("simple sec", z.tv_sec, 3);
     ASSERT_EQ_I64("simple nsec", z.tv_nsec, 0);
 
     // Nanosecond overflow: 500M + 600M = 1s + 100M
     x = (struct timespec){.tv_sec = 0, .tv_nsec = 500000000};
     y = (struct timespec){.tv_sec = 0, .tv_nsec = 600000000};
-    test_add_timespecs(&x, &y, &z);
+    add_timespecs(&x, &y, &z);
     ASSERT_EQ_I64("overflow sec", z.tv_sec, 1);
     ASSERT_EQ_I64("overflow nsec", z.tv_nsec, 100000000);
 
     // Edge case: 999999999ns + 1ns = 1s + 0ns
     x = (struct timespec){.tv_sec = 5, .tv_nsec = 999999999};
     y = (struct timespec){.tv_sec = 0, .tv_nsec = 1};
-    test_add_timespecs(&x, &y, &z);
+    add_timespecs(&x, &y, &z);
     ASSERT_EQ_I64("edge sec", z.tv_sec, 6);
     ASSERT_EQ_I64("edge nsec", z.tv_nsec, 0);
 
     // Both zero
     x = (struct timespec){.tv_sec = 0, .tv_nsec = 0};
     y = (struct timespec){.tv_sec = 0, .tv_nsec = 0};
-    test_add_timespecs(&x, &y, &z);
+    add_timespecs(&x, &y, &z);
     ASSERT_EQ_I64("zero sec", z.tv_sec, 0);
     ASSERT_EQ_I64("zero nsec", z.tv_nsec, 0);
 
@@ -169,7 +132,7 @@ static void testResetStats(void) {
     // Fill with non-zero data
     memset(&st, 0xFF, sizeof(st));
 
-    test_reset_stats(&st);
+    reset_stats(&st);
 
     ASSERT_EQ_I64("start zero", st.start, 0);
     ASSERT_EQ_I64("end zero", st.end, 0);
@@ -199,38 +162,38 @@ static void testAddStats(void) {
     s2.demod_preambles = 75;
     s1.unique_aircraft = 10;
     s2.unique_aircraft = 5;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_EQ_U32("msg sum", target.messages_total, 300);
     ASSERT_EQ_U32("preambles sum", target.demod_preambles, 125);
     ASSERT_EQ_U32("aircraft sum", target.unique_aircraft, 15);
 
     // Start takes earlier non-zero
     s1.start = 1000; s2.start = 500;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_EQ_I64("start earlier", target.start, 500);
 
     // Start takes non-zero when one is zero
     s1.start = 0; s2.start = 500;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_EQ_I64("start nonzero", target.start, 500);
 
     s1.start = 1000; s2.start = 0;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_EQ_I64("start nonzero2", target.start, 1000);
 
     // End takes later
     s1.end = 2000; s2.end = 3000;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_EQ_I64("end later", target.end, 3000);
 
     // Peak signal power takes max
     s1.peak_signal_power = -5.0; s2.peak_signal_power = -3.0;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_FLOAT_NEAR("peak max", target.peak_signal_power, -3.0, 0.001);
 
     // Distance min takes min
     s1.distance_min = 100.0; s2.distance_min = 50.0;
-    test_add_stats_partial(&s1, &s2, &target);
+    add_stats(&s1, &s2, &target);
     ASSERT_FLOAT_NEAR("dist min", target.distance_min, 50.0, 0.001);
 
     fprintf(stderr, "testAddStats: done\n\n");
@@ -244,32 +207,32 @@ static void testPercentile(void) {
     // Single element
     {
         float vals[] = {42.0f};
-        ASSERT_FLOAT_NEAR("pct single", test_percentile(0.5f, vals, 1), 42.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct single", percentile(0.5f, vals, 1), 42.0, 0.001);
     }
 
     // Median of 5 sorted values
     {
         float vals[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-        ASSERT_FLOAT_NEAR("pct median5", test_percentile(0.5f, vals, 5), 3.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct median5", percentile(0.5f, vals, 5), 3.0, 0.001);
     }
 
     // 25th percentile of 5 sorted values
     {
         float vals[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-        ASSERT_FLOAT_NEAR("pct 25th", test_percentile(0.25f, vals, 5), 2.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct 25th", percentile(0.25f, vals, 5), 2.0, 0.001);
     }
 
     // 75th percentile of 5 sorted values
     {
         float vals[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-        ASSERT_FLOAT_NEAR("pct 75th", test_percentile(0.75f, vals, 5), 4.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct 75th", percentile(0.75f, vals, 5), 4.0, 0.001);
     }
 
     // Boundary values: p=0 -> first, p=1 -> last
     {
         float vals[] = {10.0f, 20.0f, 30.0f};
-        ASSERT_FLOAT_NEAR("pct p0", test_percentile(0.0f, vals, 3), 10.0, 0.001);
-        ASSERT_FLOAT_NEAR("pct p1", test_percentile(1.0f, vals, 3), 30.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct p0", percentile(0.0f, vals, 3), 10.0, 0.001);
+        ASSERT_FLOAT_NEAR("pct p1", percentile(1.0f, vals, 3), 30.0, 0.001);
     }
 
     fprintf(stderr, "testPercentile: done\n\n");
@@ -284,20 +247,20 @@ static void testCompareFloat(void) {
 
     // Less
     a = 1.0f; b = 2.0f;
-    ASSERT_TRUE("cmp less", test_compareFloat(&a, &b) < 0);
+    ASSERT_TRUE("cmp less", compareFloat(&a, &b) < 0);
 
     // Greater
     a = 3.0f; b = 2.0f;
-    ASSERT_TRUE("cmp greater", test_compareFloat(&a, &b) > 0);
+    ASSERT_TRUE("cmp greater", compareFloat(&a, &b) > 0);
 
     // Equal
     a = 5.0f; b = 5.0f;
-    ASSERT_EQ_INT("cmp equal", test_compareFloat(&a, &b), 0);
+    ASSERT_EQ_INT("cmp equal", compareFloat(&a, &b), 0);
 
     // Works with qsort
     {
         float vals[] = {5.0f, 1.0f, 3.0f, 2.0f, 4.0f};
-        qsort(vals, 5, sizeof(float), test_compareFloat);
+        qsort(vals, 5, sizeof(float), compareFloat);
         for (int i = 0; i < 4; i++) {
             ASSERT_TRUE("qsort ordered", vals[i] <= vals[i + 1]);
         }
@@ -308,6 +271,73 @@ static void testCompareFloat(void) {
     fprintf(stderr, "testCompareFloat: done\n\n");
 }
 
+// ---- testStatsResetCount ----
+
+static void testStatsResetCount(void) {
+    fprintf(stderr, "=== testStatsResetCount ===\n");
+
+    // Populate globalStatsCount with nonzero values
+    struct statsCount *s = &Modes.globalStatsCount;
+    s->readsb_aircraft_with_position = 42;
+    s->readsb_aircraft_no_position = 10;
+    s->readsb_aircraft_total = 52;
+    s->readsb_aircraft_adsb_version_0 = 5;
+    s->readsb_aircraft_adsb_version_1 = 15;
+    s->readsb_aircraft_adsb_version_2 = 22;
+    s->readsb_aircraft_emergency = 1;
+    s->readsb_aircraft_rssi_average = -20.0;
+    s->readsb_aircraft_rssi_max = -5.0;
+    s->readsb_aircraft_rssi_min = -40.0;
+    s->readsb_aircraft_with_flight_number = 30;
+    s->readsb_aircraft_without_flight_number = 22;
+    s->rssi_table_len = 100;
+
+    statsResetCount();
+
+    ASSERT_EQ_INT("with_position", s->readsb_aircraft_with_position, 0);
+    ASSERT_EQ_INT("no_position", s->readsb_aircraft_no_position, 0);
+    ASSERT_EQ_INT("total", s->readsb_aircraft_total, 0);
+    ASSERT_EQ_INT("v0", s->readsb_aircraft_adsb_version_0, 0);
+    ASSERT_EQ_INT("v1", s->readsb_aircraft_adsb_version_1, 0);
+    ASSERT_EQ_INT("v2", s->readsb_aircraft_adsb_version_2, 0);
+    ASSERT_EQ_INT("emergency", s->readsb_aircraft_emergency, 0);
+    ASSERT_FLOAT_NEAR("rssi_max reset", s->readsb_aircraft_rssi_max, -50.0, 0.001);
+    ASSERT_FLOAT_NEAR("rssi_min reset", s->readsb_aircraft_rssi_min, 42.0, 0.001);
+    ASSERT_EQ_INT("with_flight", s->readsb_aircraft_with_flight_number, 0);
+    ASSERT_EQ_INT("without_flight", s->readsb_aircraft_without_flight_number, 0);
+    ASSERT_EQ_INT("rssi_table_len", s->rssi_table_len, 0);
+
+    fprintf(stderr, "testStatsResetCount: done\n\n");
+}
+
+// ---- testAppendStatsJson ----
+
+static void testAppendStatsJson(void) {
+    fprintf(stderr, "=== testAppendStatsJson ===\n");
+
+    struct stats st;
+    memset(&st, 0, sizeof(st));
+    st.start = 1700000000000LL;
+    st.end = 1700000060000LL;
+    st.messages_total = 12345;
+    st.unique_aircraft = 42;
+
+    char buf[8192];
+    char *p = buf;
+    char *end = buf + sizeof(buf);
+    p = appendStatsJson(p, end, &st, "test_key");
+
+    // Null-terminate for string search
+    *p = '\0';
+
+    ASSERT_TRUE("has key", strstr(buf, "\"test_key\"") != NULL);
+    ASSERT_TRUE("has start", strstr(buf, "\"start\"") != NULL);
+    ASSERT_TRUE("has end", strstr(buf, "\"end\"") != NULL);
+    ASSERT_TRUE("has messages", strstr(buf, "\"messages\":12345") != NULL);
+
+    fprintf(stderr, "testAppendStatsJson: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -316,6 +346,8 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testAddStats();
     testPercentile();
     testCompareFloat();
+    testStatsResetCount();
+    testAppendStatsJson();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

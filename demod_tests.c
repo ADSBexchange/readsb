@@ -1,9 +1,10 @@
 // Part of readsb, a Mode-S/ADSB/TIS message decoder.
 //
-// demod_tests.c - unit tests for demodulator correlation functions
+// demod_tests.c - unit tests for demodulator functions
 //
-// Self-contained: copies slice_phase functions and generate_damage_set
-// directly. No external dependencies.
+// Uses #include "demod_2400.c" to access static functions directly.
+// Provides linker stubs for external symbols that demod_2400.c references
+// but that we don't exercise in the tests.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,40 +12,32 @@
 #include <stdint.h>
 #include <math.h>
 
-// ---- Copied pure functions from demod_2400.c ----
+#include "readsb.h"
 
-static inline int slice_phase0(uint16_t *m) {
-    return 18 * m[0] - 15 * m[1] - 3 * m[2];
-}
+// ---- Linker stubs ----
 
-static inline int slice_phase1(uint16_t *m) {
-    return 14 * m[0] - 5 * m[1] - 9 * m[2];
-}
+struct _Modes Modes;
+struct _Threads Threads;
+uint32_t modeAC_count[4096];
+uint32_t modeAC_match[4096];
+void setExit(int __attribute__((unused)) arg) { }
+int64_t mstime(void) { return 1700000000000LL; }
 
-static inline int slice_phase2(uint16_t *m) {
-    return 16 * m[0] + 5 * m[1] - 20 * m[2];
-}
+int scoreModesMessage(unsigned char __attribute__((unused)) *msg,
+                      int __attribute__((unused)) validbits) { return -2; }
+int decodeModesMessage(struct modesMessage __attribute__((unused)) *mm) { return -1; }
+void netUseMessage(struct modesMessage __attribute__((unused)) *mm) { }
+static struct modesMessage dummy_mm;
+struct modesMessage *netGetMM(struct messageBuffer __attribute__((unused)) *buf) { return &dummy_mm; }
+void netDrainMessageBuffers(void) { }
+int64_t receiveclock_ms_elapsed(int64_t __attribute__((unused)) t1,
+                                 int64_t __attribute__((unused)) t2) { return 0; }
+void decodeModeAMessage(struct modesMessage __attribute__((unused)) *mm,
+                         int __attribute__((unused)) ModeA) { }
 
-static inline int slice_phase3(uint16_t *m) {
-    return 7 * m[0] + 11 * m[1] - 18 * m[2];
-}
+// ---- Include source under test ----
 
-static inline int slice_phase4(uint16_t *m) {
-    return 4 * m[0] + 15 * m[1] - 20 * m[2] + 1 * m[3];
-}
-
-static uint32_t generate_damage_set(uint8_t df, unsigned damage_bits) {
-    uint32_t result = (1 << df);
-    if (!damage_bits)
-        return result;
-
-    for (unsigned bit = 0; bit < 5; ++bit) {
-        unsigned damaged_df = df ^ (1 << bit);
-        result |= generate_damage_set(damaged_df, damage_bits - 1);
-    }
-
-    return result;
-}
+#include "demod_2400.c"
 
 // ---- test helpers ----
 
@@ -60,6 +53,14 @@ static int failures = 0;
 #define ASSERT_INT_EQ(tag, got, expected) do { \
     if ((got) != (expected)) { \
         fprintf(stderr, "%s: FAIL: got %d, expected %d\n", tag, (int)(got), (int)(expected)); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_U32_EQ(tag, got, expected) do { \
+    uint32_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got 0x%08x, expected 0x%08x\n", tag, _g, _e); \
         failures++; \
     } \
 } while(0)
@@ -103,13 +104,7 @@ static void testSlicePhaseFormulas(void) {
     // phase4: 4*100 + 15*200 - 20*300 + 1*400 = 400 + 3000 - 6000 + 400 = -2200
     ASSERT_INT_EQ("phase4 known", slice_phase4(v2), -2200);
 
-    // DC balance: coefficients sum to ~0
-    // phase0: 18 - 15 - 3 = 0 ✓
-    // phase1: 14 - 5 - 9 = 0 ✓
-    // phase2: 16 + 5 - 20 = 1 (close to 0, not exact)
-    // phase3: 7 + 11 - 18 = 0 ✓
-    // phase4: 4 + 15 - 20 + 1 = 0 ✓
-    // Verify DC balance: constant input yields near-zero
+    // DC balance: constant input yields near-zero
     uint16_t dc[4] = {1000, 1000, 1000, 1000};
     ASSERT_INT_EQ("phase0 dc", slice_phase0(dc), 0);
     ASSERT_INT_EQ("phase1 dc", slice_phase1(dc), 0);
@@ -127,7 +122,6 @@ static void testSlicePhaseSignDetection(void) {
     fprintf(stderr, "=== testSlicePhaseSignDetection ===\n");
 
     // "High-low" pattern: strong first sample, weak later
-    // This represents a bit=1 (mark)
     uint16_t high_low[4] = {60000, 1000, 1000, 1000};
     ASSERT_TRUE("p0 high>0", slice_phase0(high_low) > 0);
     ASSERT_TRUE("p1 high>0", slice_phase1(high_low) > 0);
@@ -136,7 +130,6 @@ static void testSlicePhaseSignDetection(void) {
     ASSERT_TRUE("p4 high>0", slice_phase4(high_low) > 0);
 
     // "Low-high" pattern: weak first sample, strong later
-    // This represents a bit=0 (space)
     uint16_t low_high[4] = {1000, 1000, 60000, 60000};
     ASSERT_TRUE("p0 low<0", slice_phase0(low_high) < 0);
     ASSERT_TRUE("p1 low<0", slice_phase1(low_high) < 0);
@@ -163,12 +156,6 @@ static void testGenerateDamageSet(void) {
     ASSERT_INT_EQ("df0 d0 popcount", popcount32(set0_0), 1);
 
     // damage_bits=1: DF 17 plus single-bit-flip neighbors
-    // 17 = 10001 in binary. Flipping each of the 5 bits:
-    // bit 0: 10000 = 16
-    // bit 1: 10011 = 19
-    // bit 2: 10101 = 21
-    // bit 3: 11001 = 25
-    // bit 4: 00001 = 1
     uint32_t set17_1 = generate_damage_set(17, 1);
     ASSERT_TRUE("df17 d1 has 17", (set17_1 & (1u << 17)) != 0);
     ASSERT_TRUE("df17 d1 has 16", (set17_1 & (1u << 16)) != 0);
@@ -200,15 +187,73 @@ static void testGenerateDamageSetBounds(void) {
         ASSERT_TRUE(tag, (set & (1u << df)) != 0);
     }
 
-    // damage_bits=2: expected cardinality check
-    // For DF 17 with 2 damage bits: 1 (self) + 5 (1-bit) + up to 20 (2-bit)
-    // Some 2-bit flips overlap, so exact count depends on specifics.
-    // Just verify it's a reasonable number (> 6 from d=1, <= 32 total possible DFs)
+    // damage_bits=2: reasonable cardinality
     uint32_t set = generate_damage_set(17, 2);
     int pc = popcount32(set);
     ASSERT_TRUE("df17 d2 reasonable", pc > 6 && pc <= 32);
 
     fprintf(stderr, "testGenerateDamageSetBounds: done\n\n");
+}
+
+// ---- testInitBitsets ----
+
+static void testInitBitsets(void) {
+    fprintf(stderr, "=== testInitBitsets ===\n");
+
+    // Reset Modes fields relevant to init_bitsets
+    Modes.fixDF = 0;
+    Modes.nfix_crc = 0;
+
+    init_bitsets();
+
+    // Short bitset: DFs 0, 4, 5, 11
+    ASSERT_TRUE("short has DF0", (valid_df_short_bitset & (1u << 0)) != 0);
+    ASSERT_TRUE("short has DF4", (valid_df_short_bitset & (1u << 4)) != 0);
+    ASSERT_TRUE("short has DF5", (valid_df_short_bitset & (1u << 5)) != 0);
+    ASSERT_TRUE("short has DF11", (valid_df_short_bitset & (1u << 11)) != 0);
+
+    // Long bitset: DFs 16, 17, 18, 20, 21
+    ASSERT_TRUE("long has DF16", (valid_df_long_bitset & (1u << 16)) != 0);
+    ASSERT_TRUE("long has DF17", (valid_df_long_bitset & (1u << 17)) != 0);
+    ASSERT_TRUE("long has DF18", (valid_df_long_bitset & (1u << 18)) != 0);
+    ASSERT_TRUE("long has DF20", (valid_df_long_bitset & (1u << 20)) != 0);
+    ASSERT_TRUE("long has DF21", (valid_df_long_bitset & (1u << 21)) != 0);
+
+    // Without fixDF, DF17 damage neighbors should NOT be in long bitset
+    // DF17 neighbors: 16, 19, 21, 25, 1
+    // DF16 and DF21 are already present, but DF19 and DF25 should not be
+    // (unless ENABLE_DF24 is defined, in which case 25 would be present)
+#ifndef ENABLE_DF24
+    ASSERT_TRUE("no DF19 without fix", (valid_df_long_bitset & (1u << 19)) == 0);
+#endif
+
+    fprintf(stderr, "testInitBitsets: done\n\n");
+}
+
+// ---- testInitBitsetsWithDamage ----
+
+static void testInitBitsetsWithDamage(void) {
+    fprintf(stderr, "=== testInitBitsetsWithDamage ===\n");
+
+    // Enable fixDF with nfix_crc=1
+    Modes.fixDF = 1;
+    Modes.nfix_crc = 1;
+
+    init_bitsets();
+
+    // Long bitset should now include DF17 damage neighbors from generate_damage_set(17, 1)
+    uint32_t damage17 = generate_damage_set(17, 1);
+    // All bits from damage17 should be in valid_df_long_bitset
+    ASSERT_TRUE("damage set included", (valid_df_long_bitset & damage17) == damage17);
+
+    // Specifically check DF 1 (a DF17 neighbor via bit 4 flip: 10001 -> 00001)
+    ASSERT_TRUE("long has DF1 (damage)", (valid_df_long_bitset & (1u << 1)) != 0);
+
+    // Reset
+    Modes.fixDF = 0;
+    Modes.nfix_crc = 0;
+
+    fprintf(stderr, "testInitBitsetsWithDamage: done\n\n");
 }
 
 // ---- main ----
@@ -218,6 +263,8 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testSlicePhaseSignDetection();
     testGenerateDamageSet();
     testGenerateDamageSetBounds();
+    testInitBitsets();
+    testInitBitsetsWithDamage();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

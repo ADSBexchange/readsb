@@ -162,7 +162,7 @@ viewadsb: readsb
 	cp readsb viewadsb
 
 clean:
-	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests unittests mode_s_tests comm_b_tests icao_filter_tests convert_tests util_tests geomag_tests track_tests stats_tests net_io_tests json_out_tests api_tests aircraft_tests demod_tests globe_index_tests convert_benchmark
+	rm -f *.o uat2esnt/*.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o readsb viewadsb cprtests crctests dbtests unittests mode_s_tests comm_b_tests icao_filter_tests convert_tests util_tests geomag_tests track_tests stats_tests net_io_tests json_out_tests api_tests aircraft_tests demod_tests globe_index_tests crc_tests receiver_tests convert_benchmark
 
 cprtest: cprtests
 	./cprtests
@@ -257,7 +257,7 @@ aircraft_tests: aircraft_tests.o fasthash.o
 attest: aircraft_tests
 	./aircraft_tests
 
-demod_tests: demod_tests.o
+demod_tests: demod_tests.o fasthash.o
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 dmtest: demod_tests
@@ -269,7 +269,19 @@ globe_index_tests: globe_index_tests.o
 gitest: globe_index_tests
 	./globe_index_tests
 
-test: cprtest dbtest unittest mstest cbtest iftest cvtest uttest gmtest tktest sttest nittest jotest aptest attest dmtest gitest
+crc_tests: crc_tests.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+crtest2: crc_tests
+	./crc_tests
+
+receiver_tests: receiver_tests.o fasthash.o
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+rctest: receiver_tests
+	./receiver_tests
+
+test: cprtest dbtest unittest mstest cbtest iftest cvtest uttest gmtest tktest sttest nittest jotest aptest attest dmtest gitest crtest2 rctest
 
 inttest: readsb
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
