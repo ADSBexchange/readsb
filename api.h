@@ -56,6 +56,7 @@ struct apiOptions {
     int filter_interesting;
     int filter_pia;
     int filter_ladd;
+    int filter_uav;
     int filter_with_pos;
     int filter_callsign_exact;
     char callsign_exact[9];

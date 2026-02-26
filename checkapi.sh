@@ -27,6 +27,7 @@ queries+=("?all&filter_callsign_exact=DLH7Le&jv2")
 queries+=("?all&filter_callsign_prefix=DLH&jv2")
 queries+=("?all_with_pos&filter_mil&jv2")
 queries+=("?all_with_pos&filter_ladd&jv2")
+queries+=("?all_with_pos&filter_uav&jv2")
 queries+=("?all_with_pos&filter_squawk=1000&jv2")
 queries+=("/re-api/")
 

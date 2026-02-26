@@ -139,6 +139,7 @@ static int filter_dbFlags(struct apiEntry *haystack, int haylen, struct apiEntry
                 || (options->filter_interesting && (e->bin.dbFlags & 2))
                 || (options->filter_pia && (e->bin.dbFlags & 4))
                 || (options->filter_ladd && (e->bin.dbFlags & 8))
+                || (options->filter_uav && (e->bin.dbFlags & 16))
            ) {
             matches[count++] = *e;
             *alloc += e->jsonOffset.len;
@@ -1322,6 +1323,9 @@ static struct char_buffer parseFetch(struct apiCon *con, struct char_buffer *req
             } else if (byteMatchStrict(option, "filter_ladd")) {
                 options->filter_dbFlag = 1;
                 options->filter_ladd = 1;
+            } else if (byteMatchStrict(option, "filter_uav")) {
+                options->filter_dbFlag = 1;
+                options->filter_uav = 1;
             } else if (byteMatchStrict(option, "include_version")) {
                 con->include_version = 1;
             } else {
