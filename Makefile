@@ -266,7 +266,7 @@ gitest: globe_index_tests
 test: cprtest dbtest unittest mstest cbtest iftest cvtest uttest gmtest tktest sttest nittest jotest aptest dmtest gitest
 
 inttest: readsb
-	python3 tests/integration_test.py
+	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 fulltest: test inttest
 
