@@ -545,6 +545,140 @@ static void testCheckAcasRaValid(void) {
     fprintf(stderr, "testCheckAcasRaValid: done\n\n");
 }
 
+// ---- testDecodeBDS17 ----
+
+static void testDecodeBDS17(void) {
+    fprintf(stderr, "=== testDecodeBDS17 ===\n");
+
+    // Reserved bits (25-56) non-zero -> score 0
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbit(mm.MB, 25); // reserved bit set
+        int score = decodeBDS17(&mm, false);
+        ASSERT_EQ_INT("BDS17 reserved", score, 0);
+    }
+
+    // ES capable (bits 1-5 set), ES EDI (bit 6), ident (bit 7),
+    // track+heading (bits 16,24), vertical intent (bit 9)
+    // score = 5(ES) + 1(EDI) + 1(ident) + 2(track/head) + 1(vert intent) = 10
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        for (int b = 1; b <= 7; b++) setbit(mm.MB, b);
+        setbit(mm.MB, 9);  // vertical intent
+        setbit(mm.MB, 16); // track/turn
+        setbit(mm.MB, 24); // heading/speed
+        int score = decodeBDS17(&mm, false);
+        ASSERT_EQ_INT("BDS17 ES capable", score, 10);
+    }
+
+    // Not ES capable (bits 1-6 all zero), no ident (bit 7 zero),
+    // neither track/heading (bits 16,24,9 zero)
+    // score = 1(not ES) + (-2)(no ident) + 1(neither track/head) = 0
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        int score = decodeBDS17(&mm, false);
+        ASSERT_EQ_INT("BDS17 not ES", score, 0);
+    }
+
+    // Partial ES (bits 1,2 set, 3-5 zero) -> -12 penalty
+    // Also no ident, neither track/heading
+    // score = -12(partial ES) + (-2)(no ident) + 1(neither) = -13
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbit(mm.MB, 1);
+        setbit(mm.MB, 2);
+        int score = decodeBDS17(&mm, false);
+        ASSERT_EQ_INT("BDS17 partial ES", score, -13);
+    }
+
+    // Store sets COMMB_GICB_CAPS
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        decodeBDS17(&mm, true);
+        ASSERT_EQ_INT("BDS17 store", mm.commb_format, COMMB_GICB_CAPS);
+    }
+
+    fprintf(stderr, "testDecodeBDS17: done\n\n");
+}
+
+// ---- testDecodeBDS30 ----
+
+static void testDecodeBDS30(void) {
+    fprintf(stderr, "=== testDecodeBDS30 ===\n");
+
+    // Valid header (0x30) -> score 56
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        mm.MB[0] = 0x30;
+        int score = decodeBDS30(&mm, false);
+        ASSERT_EQ_INT("BDS30 valid score", score, 56);
+    }
+
+    // Store sets COMMB_ACAS_RA and acas_ra_valid
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        mm.MB[0] = 0x30;
+        decodeBDS30(&mm, true);
+        ASSERT_EQ_INT("BDS30 store fmt", mm.commb_format, COMMB_ACAS_RA);
+        ASSERT_EQ_INT("BDS30 store valid", mm.acas_ra_valid, 1);
+    }
+
+    // Wrong header (0x20) -> score 0
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        mm.MB[0] = 0x20;
+        int score = decodeBDS30(&mm, false);
+        ASSERT_EQ_INT("BDS30 wrong hdr", score, 0);
+    }
+
+    // store=false -> commb_format unchanged
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        mm.MB[0] = 0x30;
+        decodeBDS30(&mm, false);
+        ASSERT_EQ_INT("BDS30 no store", mm.commb_format, 0);
+    }
+
+    fprintf(stderr, "testDecodeBDS30: done\n\n");
+}
+
+// ---- testDecodeBDS40EdgeCases ----
+
+static void testDecodeBDS40EdgeCases(void) {
+    fprintf(stderr, "=== testDecodeBDS40EdgeCases ===\n");
+
+    // MCP valid but extreme altitude (>50000ft) -> score 0 (returns 0)
+    // mcp_raw for 60000ft: 60000/16 = 3750
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbit(mm.MB, 1);                  // mcp_valid
+        setbits_mb(mm.MB, 2, 13, 3750);    // mcp_raw -> 60000ft
+        int score = decodeBDS40(&mm, false);
+        ASSERT_EQ_INT("BDS40 extreme alt", score, 0);
+    }
+
+    // MCP valid=1 but raw=0 -> inconsistency -> score 0
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbit(mm.MB, 1); // mcp_valid=1, mcp_raw=0
+        int score = decodeBDS40(&mm, false);
+        ASSERT_EQ_INT("BDS40 valid no raw", score, 0);
+    }
+
+    fprintf(stderr, "testDecodeBDS40EdgeCases: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -556,6 +690,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDecodeBDS60();
     testDecodeCommB();
     testCheckAcasRaValid();
+    testDecodeBDS17();
+    testDecodeBDS30();
+    testDecodeBDS40EdgeCases();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

@@ -315,6 +315,249 @@ static void testReceiverMaintenance(void) {
     fprintf(stderr, "testReceiverMaintenance: done\n\n");
 }
 
+// ---- testReceiverPositionReceived ----
+
+static void testReceiverPositionReceived(void) {
+    fprintf(stderr, "=== testReceiverPositionReceived ===\n");
+
+    // Zero receiverId -> RECEIVER_RANGE_UNCLEAR
+    {
+        resetReceiverState();
+        receiverInit();
+
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.receiverId = 0;
+
+        int ret = receiverPositionReceived(&a, &mm, 45.0, -90.0, test_now);
+        ASSERT_EQ_INT("zero id", ret, RECEIVER_RANGE_UNCLEAR);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Invalid latitude (>85) -> RECEIVER_RANGE_UNCLEAR
+    {
+        resetReceiverState();
+        receiverInit();
+
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.receiverId = 0xAAAABBBBCCCCDDDDULL;
+
+        int ret = receiverPositionReceived(&a, &mm, 90.0, 10.0, test_now);
+        ASSERT_EQ_INT("lat>85", ret, RECEIVER_RANGE_UNCLEAR);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Non-ADS-B source, no existing receiver -> RECEIVER_RANGE_UNCLEAR
+    {
+        resetReceiverState();
+        receiverInit();
+        Modes.position_persistence = 4;
+
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.pos_reliable_odd = 10;
+        a.pos_reliable_even = 10;
+
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.receiverId = 0x1111222233334444ULL;
+        mm.source = SOURCE_MLAT; // not ADS-B
+
+        int ret = receiverPositionReceived(&a, &mm, 45.0, -90.0, test_now);
+        ASSERT_EQ_INT("non-adsb", ret, RECEIVER_RANGE_UNCLEAR);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // New receiver with ADS-B, reliable position -> RECEIVER_RANGE_GOOD, receiver created
+    {
+        resetReceiverState();
+        receiverInit();
+        Modes.position_persistence = 4;
+
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.pos_reliable_odd = 10;
+        a.pos_reliable_even = 10;
+
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.receiverId = 0x5555666677778888ULL;
+        mm.source = SOURCE_ADSB;
+        mm.cpr_type = CPR_AIRBORNE;
+
+        int ret = receiverPositionReceived(&a, &mm, 45.0, -90.0, test_now);
+        ASSERT_EQ_INT("new adsb", ret, RECEIVER_RANGE_GOOD);
+
+        struct receiver *r = receiverGet(mm.receiverId);
+        ASSERT_NOT_NULL("receiver created", r);
+        ASSERT_FLOAT_NEAR("lat min", r->latMin, 45.0, 0.001);
+        ASSERT_FLOAT_NEAR("lon min", r->lonMin, -90.0, 0.001);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Extent growth: second position further away expands extent
+    {
+        resetReceiverState();
+        receiverInit();
+        Modes.position_persistence = 4;
+
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.pos_reliable_odd = 10;
+        a.pos_reliable_even = 10;
+
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.receiverId = 0x9999AAAA0000BBBBULL;
+        mm.source = SOURCE_ADSB;
+        mm.cpr_type = CPR_AIRBORNE;
+
+        // First position
+        receiverPositionReceived(&a, &mm, 45.0, -90.0, test_now);
+
+        // Second position slightly offset
+        int ret = receiverPositionReceived(&a, &mm, 45.5, -89.5, test_now);
+        ASSERT_EQ_INT("extent growth", ret, RECEIVER_RANGE_GOOD);
+
+        struct receiver *r = receiverGet(mm.receiverId);
+        ASSERT_NOT_NULL("receiver exists", r);
+        ASSERT_FLOAT_NEAR("grown lat min", r->latMin, 45.0, 0.001);
+        ASSERT_FLOAT_NEAR("grown lat max", r->latMax, 45.5, 0.001);
+        ASSERT_FLOAT_NEAR("grown lon min", r->lonMin, -90.0, 0.001);
+        ASSERT_FLOAT_NEAR("grown lon max", r->lonMax, -89.5, 0.001);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    fprintf(stderr, "testReceiverPositionReceived: done\n\n");
+}
+
+// ---- testReceiverGetReference ----
+
+static void testReceiverGetReference(void) {
+    fprintf(stderr, "=== testReceiverGetReference ===\n");
+
+    // No receiver -> returns NULL
+    {
+        resetReceiverState();
+        receiverInit();
+
+        double lat, lon;
+        struct receiver *r = receiverGetReference(0xDEADBEEFULL, &lat, &lon, NULL, 1);
+        ASSERT_NULL("no receiver", r);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Receiver with insufficient positionCounter -> returns NULL
+    {
+        resetReceiverState();
+        receiverInit();
+        Modes.receiver_focus = 0;
+        Modes.viewadsb = 0;
+
+        uint64_t id = 0xAAAABBBBCCCC0001ULL;
+        struct receiver *r = receiverCreate(id);
+        r->latMin = 40.0;
+        r->latMax = 42.0;
+        r->lonMin = -75.0;
+        r->lonMax = -73.0;
+        r->positionCounter = 10; // needs 100 by default
+
+        double lat, lon;
+        struct receiver *got = receiverGetReference(id, &lat, &lon, NULL, 1);
+        ASSERT_NULL("low counter", got);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Valid receiver with enough positionCounter -> returns reference
+    {
+        resetReceiverState();
+        receiverInit();
+        Modes.receiver_focus = 0;
+        Modes.viewadsb = 0;
+
+        uint64_t id = 0xAAAABBBBCCCC0002ULL;
+        struct receiver *r = receiverCreate(id);
+        r->latMin = 40.0;
+        r->latMax = 42.0;
+        r->lonMin = -75.0;
+        r->lonMax = -73.0;
+        r->positionCounter = 200;
+        r->badExtent = 0;
+
+        double lat, lon;
+        struct receiver *got = receiverGetReference(id, &lat, &lon, NULL, 1);
+        ASSERT_NOT_NULL("valid ref", got);
+        ASSERT_FLOAT_NEAR("ref lat", lat, 41.0, 0.001);
+        ASSERT_FLOAT_NEAR("ref lon", lon, -74.0, 0.001);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    fprintf(stderr, "testReceiverGetReference: done\n\n");
+}
+
+// ---- testReceiverBad ----
+
+static void testReceiverBadFunc(void) {
+    fprintf(stderr, "=== testReceiverBad ===\n");
+
+    // No existing receiver -> receiverBad creates one, returns it
+    {
+        resetReceiverState();
+        receiverInit();
+
+        uint64_t id = 0xBBBB111122223333ULL;
+        ASSERT_NULL("before bad", receiverGet(id));
+
+        struct receiver *r = receiverBad(id, 0xABC123, test_now);
+        ASSERT_NOT_NULL("bad creates", r);
+        ASSERT_TRUE("bad counter", r->badCounter >= 1.0);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    // Existing receiver, repeated calls increment badCounter
+    {
+        resetReceiverState();
+        receiverInit();
+
+        uint64_t id = 0xCCCC444455556666ULL;
+        struct receiver *r = receiverCreate(id);
+        r->lastSeen = test_now - 1000;
+        r->timedOutUntil = 0;
+
+        struct receiver *ret = receiverBad(id, 0xDEF456, test_now);
+        ASSERT_NOT_NULL("existing bad", ret);
+        ASSERT_TRUE("counter inc", ret->badCounter >= 1.0);
+
+        receiverCleanup();
+        resetReceiverState();
+    }
+
+    fprintf(stderr, "testReceiverBad: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -324,6 +567,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testReceiverTimeout();
     testReceiverCheckBad();
     testReceiverMaintenance();
+    testReceiverPositionReceived();
+    testReceiverGetReference();
+    testReceiverBadFunc();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

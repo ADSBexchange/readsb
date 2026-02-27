@@ -256,6 +256,117 @@ static void testInitBitsetsWithDamage(void) {
     fprintf(stderr, "testInitBitsetsWithDamage: done\n\n");
 }
 
+// ---- testSliceBytePhaseAdvance ----
+// Verify slice_byte cycles phases 0->1->2->3->4->0 and advances pointer correctly
+
+static void testSliceBytePhaseAdvance(void) {
+    fprintf(stderr, "=== testSliceBytePhaseAdvance ===\n");
+
+    // Use all-zero samples (any constant works; we just test mechanics)
+    uint16_t samples[30];
+    memset(samples, 0, sizeof(samples));
+
+    for (int start_phase = 0; start_phase <= 4; start_phase++) {
+        uint16_t *ptr = samples;
+        int phase = start_phase;
+        slice_byte(&ptr, &phase);
+
+        char tag[64];
+        // Phase should advance: 0->1, 1->2, 2->3, 3->4, 4->0
+        int expected_phase = (start_phase + 1) % 5;
+        snprintf(tag, sizeof(tag), "phase %d->%d", start_phase, expected_phase);
+        ASSERT_INT_EQ(tag, phase, expected_phase);
+
+        // Pointer should advance by 19 for phases 0-3, 20 for phase 4
+        int expected_advance = (start_phase == 4) ? 20 : 19;
+        snprintf(tag, sizeof(tag), "advance phase=%d", start_phase);
+        ASSERT_INT_EQ(tag, (int)(ptr - samples), expected_advance);
+    }
+
+    // Verify full cycle: 5 consecutive calls cycle back to original phase
+    {
+        uint16_t big_buf[120];
+        memset(big_buf, 0, sizeof(big_buf));
+        uint16_t *ptr = big_buf;
+        int phase = 0;
+        for (int i = 0; i < 5; i++) {
+            slice_byte(&ptr, &phase);
+        }
+        ASSERT_INT_EQ("full cycle phase", phase, 0);
+        // Total advance: 19*4 + 20 = 96
+        ASSERT_INT_EQ("full cycle advance", (int)(ptr - big_buf), 96);
+    }
+
+    fprintf(stderr, "testSliceBytePhaseAdvance: done\n\n");
+}
+
+// ---- testSliceByteDetection ----
+// Verify slice_byte correctly distinguishes high/low magnitude patterns
+// The phase functions are matched filters: positive coefficients on early samples,
+// negative on later → a "high then low" pattern gives positive (bit=1),
+// while constant or "low then high" gives zero or negative (bit=0).
+
+static void testSliceByteDetection(void) {
+    fprintf(stderr, "=== testSliceByteDetection ===\n");
+
+    // All-zero input -> all bits zero for every starting phase
+    {
+        uint16_t zeros[30];
+        memset(zeros, 0, sizeof(zeros));
+
+        for (int p = 0; p <= 4; p++) {
+            uint16_t *ptr = zeros;
+            int phase = p;
+            uint8_t byte = slice_byte(&ptr, &phase);
+            char tag[64];
+            snprintf(tag, sizeof(tag), "zeros phase=%d", p);
+            ASSERT_INT_EQ(tag, byte, 0x00);
+        }
+    }
+
+    // Constant-high input -> only phase2 calls return positive (DC offset +1)
+    // phase0,1,3,4 are DC-balanced (coeff sum=0) so constant input → 0
+    // phase2 has coeff sum=+1, so constant input → positive → bit=1
+    // This gives a deterministic pattern based on which bit positions use phase2
+    {
+        uint16_t high[30];
+        for (int i = 0; i < 30; i++) high[i] = 65535;
+
+        // Phase 0 byte layout: p0,p2,p4,p1,p3,p0,p2,p4
+        // phase2 at positions: bit6, bit1 → 0x42
+        uint16_t *ptr = high;
+        int phase = 0;
+        uint8_t byte = slice_byte(&ptr, &phase);
+        ASSERT_INT_EQ("const phase0", byte, 0x42);
+
+        // Phase 1 byte layout: p1,p3,p0,p2,p4,p1,p3,p0
+        // phase2 at position: bit4 → 0x10
+        ptr = high; phase = 1;
+        byte = slice_byte(&ptr, &phase);
+        ASSERT_INT_EQ("const phase1", byte, 0x10);
+
+        // Phase 2 byte layout: p2,p4,p1,p3,p0,p2,p4,p1
+        // phase2 at positions: bit7, bit2 → 0x84
+        ptr = high; phase = 2;
+        byte = slice_byte(&ptr, &phase);
+        ASSERT_INT_EQ("const phase2", byte, 0x84);
+
+        // Phase 3 byte layout: p3,p0,p2,p4,p1,p3,p0,p2
+        // phase2 at positions: bit5, bit0 → 0x21
+        ptr = high; phase = 3;
+        byte = slice_byte(&ptr, &phase);
+        ASSERT_INT_EQ("const phase3", byte, 0x21);
+
+        // Phase 4 byte layout: p4,p1,p3,p0,p2,p4,p1,p3
+        // phase2 at position: bit3 → 0x08
+        ptr = high; phase = 4;
+        byte = slice_byte(&ptr, &phase);
+        ASSERT_INT_EQ("const phase4", byte, 0x08);
+    }
+
+    fprintf(stderr, "testSliceByteDetection: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -265,6 +376,8 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testGenerateDamageSetBounds();
     testInitBitsets();
     testInitBitsetsWithDamage();
+    testSliceBytePhaseAdvance();
+    testSliceByteDetection();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

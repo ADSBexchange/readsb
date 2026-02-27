@@ -688,6 +688,184 @@ static void testDecodeESAirborneVelocity_airspeed(void) {
     fprintf(stderr, "testDecodeESAirborneVelocity_airspeed: done\n\n");
 }
 
+// ---- testCorrectAaField ----
+
+static void testCorrectAaField(void) {
+    fprintf(stderr, "=== testCorrectAaField ===\n");
+
+    // NULL ei -> returns 0, addr unchanged
+    {
+        uint32_t addr = 0xABCDEF;
+        int ret = correct_aa_field(&addr, NULL);
+        ASSERT_EQ_INT("null ei ret", ret, 0);
+        ASSERT_EQ_UINT("null ei addr", addr, 0xABCDEF);
+    }
+
+    // Error bit outside addr range (bit 5, not in 8-31) -> returns 0, addr unchanged
+    {
+        uint32_t addr = 0xABCDEF;
+        struct errorinfo ei;
+        memset(&ei, 0, sizeof(ei));
+        ei.errors = 1;
+        ei.bit[0] = 5;
+        int ret = correct_aa_field(&addr, &ei);
+        ASSERT_EQ_INT("outside ret", ret, 0);
+        ASSERT_EQ_UINT("outside addr", addr, 0xABCDEF);
+    }
+
+    // Single error in addr range: bit 8 -> flips bit (31-8)=23 of addr
+    {
+        uint32_t addr = 0x000000;
+        struct errorinfo ei;
+        memset(&ei, 0, sizeof(ei));
+        ei.errors = 1;
+        ei.bit[0] = 8;
+        int ret = correct_aa_field(&addr, &ei);
+        ASSERT_EQ_INT("single ret", ret, 1);
+        ASSERT_EQ_UINT("single addr", addr, (1u << 23));
+    }
+
+    // Multiple errors, mixed: bit[0]=10 (in range), bit[1]=3 (outside)
+    {
+        uint32_t addr = 0x000000;
+        struct errorinfo ei;
+        memset(&ei, 0, sizeof(ei));
+        ei.errors = 2;
+        ei.bit[0] = 10; // flips bit (31-10)=21
+        ei.bit[1] = 3;  // outside range, no flip
+        int ret = correct_aa_field(&addr, &ei);
+        ASSERT_EQ_INT("mixed ret", ret, 1);
+        ASSERT_EQ_UINT("mixed addr", addr, (1u << 21));
+    }
+
+    fprintf(stderr, "testCorrectAaField: done\n\n");
+}
+
+// ---- testSetSquawkFromID13 ----
+
+static void testSetSquawkFromID13(void) {
+    fprintf(stderr, "=== testSetSquawkFromID13 ===\n");
+
+    // Zero input -> squawkHex=0, squawkDec=0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        setSquawkFromID13(&mm, 0);
+        ASSERT_EQ_UINT("zero hex", mm.squawkHex, 0);
+        ASSERT_EQ_UINT("zero dec", mm.squawkDec, 0);
+        ASSERT_EQ_INT("zero valid", mm.squawk_valid, 1);
+    }
+
+    // Round-trip: encode a known squawk via decodeID13Field, verify decode
+    // decodeID13Field(0x1FFF) produces all output bits set (known from existing test)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        int id13 = 0x1FFF;
+        setSquawkFromID13(&mm, id13);
+        // squawkHex should match decodeID13Field(0x1FFF)
+        int expected_all = 0x0010 | 0x1000 | 0x0020 | 0x2000 | 0x0040 | 0x4000 |
+                           0x0100 | 0x0001 | 0x0200 | 0x0002 | 0x0400 | 0x0004;
+        ASSERT_EQ_UINT("all hex", mm.squawkHex, (unsigned)expected_all);
+        ASSERT_EQ_INT("all valid", mm.squawk_valid, 1);
+    }
+
+    // Single bit input: 0x0800 -> decodeID13Field returns 0x1000 -> squawkHex=0x1000
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        setSquawkFromID13(&mm, 0x0800);
+        ASSERT_EQ_UINT("single hex", mm.squawkHex, 0x1000);
+        ASSERT_EQ_INT("single valid", mm.squawk_valid, 1);
+    }
+
+    fprintf(stderr, "testSetSquawkFromID13: done\n\n");
+}
+
+// ---- testFixDF17msgtype ----
+
+static void testFixDF17msgtype(void) {
+    fprintf(stderr, "=== testFixDF17msgtype ===\n");
+
+    // fixDF disabled -> returns 0, msgtype unchanged
+    {
+        Modes.fixDF = 0;
+        Modes.nfix_crc = 0;
+        unsigned char msg[14] = {0};
+        int msgtype = 25;
+        unsigned char ret = fixDF17msgtype(msg, &msgtype);
+        ASSERT_EQ_UINT("disabled ret", ret, 0);
+        ASSERT_EQ_INT("disabled msgtype", msgtype, 25);
+    }
+
+    // Non-candidate msgtype (17, already correct) -> returns 0
+    {
+        Modes.fixDF = 1;
+        Modes.nfix_crc = 1;
+        unsigned char msg[14] = {0};
+        msg[0] = 17 << 3;
+        int msgtype = 17;
+        unsigned char ret = fixDF17msgtype(msg, &msgtype);
+        ASSERT_EQ_UINT("already17 ret", ret, 0);
+        ASSERT_EQ_INT("already17 msgtype", msgtype, 17);
+    }
+
+    // Non-candidate msgtype (e.g. 4) -> returns 0
+    {
+        Modes.fixDF = 1;
+        Modes.nfix_crc = 1;
+        unsigned char msg[14] = {0};
+        msg[0] = 4 << 3;
+        int msgtype = 4;
+        unsigned char ret = fixDF17msgtype(msg, &msgtype);
+        ASSERT_EQ_UINT("df4 ret", ret, 0);
+        ASSERT_EQ_INT("df4 msgtype", msgtype, 4);
+    }
+
+    // Candidate msgtype with bad CRC -> returns 0, msgtype stays
+    {
+        Modes.fixDF = 1;
+        Modes.nfix_crc = 1;
+        modesChecksumInit(1);
+        unsigned char msg[14];
+        memset(msg, 0x42, sizeof(msg)); // random garbage
+        msg[0] = 25 << 3; // DF25 = 11001xxx
+        int msgtype = 25;
+        unsigned char ret = fixDF17msgtype(msg, &msgtype);
+        ASSERT_EQ_UINT("badcrc ret", ret, 0);
+        ASSERT_EQ_INT("badcrc msgtype", msgtype, 25);
+    }
+
+    // Reset
+    Modes.fixDF = 0;
+    Modes.nfix_crc = 0;
+
+    fprintf(stderr, "testFixDF17msgtype: done\n\n");
+}
+
+// ---- testScoreModesMessage ----
+
+static void testScoreModesMessage(void) {
+    fprintf(stderr, "=== testScoreModesMessage ===\n");
+
+    modesChecksumInit(0);
+
+    // Too short (validbits < 56) -> returns -2
+    {
+        unsigned char msg[14] = {0};
+        ASSERT_EQ_INT("too short", scoreModesMessage(msg, 48), -2);
+    }
+
+    // All zeros 56-bit -> returns -2 (all_zeros check fails)
+    {
+        unsigned char msg[14];
+        memset(msg, 0, sizeof(msg));
+        ASSERT_EQ_INT("all zeros", scoreModesMessage(msg, 56), -2);
+    }
+
+    fprintf(stderr, "testScoreModesMessage: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -701,6 +879,10 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDecodeESIdentAndCategory();
     testDecodeESAirborneVelocity_ground();
     testDecodeESAirborneVelocity_airspeed();
+    testCorrectAaField();
+    testSetSquawkFromID13();
+    testFixDF17msgtype();
+    testScoreModesMessage();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

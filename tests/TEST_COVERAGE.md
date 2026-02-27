@@ -7,7 +7,7 @@ Last updated: 2026-02-26
 | Category | Count |
 |----------|-------|
 | Unit test binaries | 22 |
-| Unit test functions | ~161 |
+| Unit test functions | ~173 |
 | Integration test files | 13 |
 | Integration test functions | 87 |
 
@@ -32,9 +32,9 @@ Last updated: 2026-02-26
 | `crc_tests.c` | `crc.c` | #include | 6 | 3 | -lm |
 | `dbtests.c` | `aircraft.c` | #include | 4 | 2 | — |
 | `unittests.c` | multiple | link .o | 8 | 3 | -lm |
-| `mode_s_tests.c` | `mode_s.c` | #include | 8 | 5 | -lm |
+| `mode_s_tests.c` | `mode_s.c` | #include | 12 | 5 | -lm |
 | `mode_ac_tests.c` | `mode_ac.c` | #include | 7 | 3 | -lm |
-| `comm_b_tests.c` | `comm_b.c` | #include | 8 | 3 | -lm |
+| `comm_b_tests.c` | `comm_b.c` | #include | 11 | 3 | -lm |
 | `icao_filter_tests.c` | `icao_filter.c` | link .o | 7 | 3 | -lm |
 | `convert_tests.c` | `convert.c` | #include | 9 | 3 | -lm |
 | `util_tests.c` | `util.c` | link .o | 10 | 4 | -lm -lzstd -lz -lpthread -lrt |
@@ -45,9 +45,9 @@ Last updated: 2026-02-26
 | `json_out_tests.c` | `json_out.c` | #include | 8 | 14 | -lm -lz |
 | `api_tests.c` | `api.c` | #include | 12 | 10 | -lm -lzstd -lz -lpthread -lrt |
 | `aircraft_tests.c` | `aircraft.c` | #include | 10 | 8 | -lm -lz |
-| `demod_tests.c` | `demod_2400.c` | #include | 6 | 5 | -lm |
+| `demod_tests.c` | `demod_2400.c` | #include | 8 | 5 | -lm |
 | `globe_index_tests.c` | `globe_index.c` | copy | 4 | 0 | -lm |
-| `receiver_tests.c` | `receiver.c` | #include | 6 | 5 | -lm |
+| `receiver_tests.c` | `receiver.c` | #include | 9 | 5 | -lm |
 | `ais_charset_tests.c` | `ais_charset.c` | link .o | 3 | 0 | — |
 
 ### Makefile Test Targets
