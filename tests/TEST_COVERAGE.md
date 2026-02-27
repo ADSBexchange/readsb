@@ -7,7 +7,7 @@ Last updated: 2026-02-26
 | Category | Count |
 |----------|-------|
 | Unit test binaries | 22 |
-| Unit test functions | ~173 |
+| Unit test functions | ~185 |
 | Integration test files | 13 |
 | Integration test functions | 87 |
 
@@ -27,19 +27,19 @@ Last updated: 2026-02-26
 | File | Source | Pattern | Tests | Stubs | Libs |
 |------|--------|---------|-------|-------|------|
 | `cprtests.c` | `cpr.c` | link .o | 3 | 0 | -lm |
-| `cpr_tests.c` | `cpr.c` | #include | 8 | 0 | -lm |
+| `cpr_tests.c` | `cpr.c` | #include | 9 | 0 | -lm |
 | `crctests.c` | `crc.c` | standalone (CRCDEBUG) | 3 | 0 | — |
 | `crc_tests.c` | `crc.c` | #include | 6 | 3 | -lm |
 | `dbtests.c` | `aircraft.c` | #include | 4 | 2 | — |
 | `unittests.c` | multiple | link .o | 8 | 3 | -lm |
-| `mode_s_tests.c` | `mode_s.c` | #include | 12 | 5 | -lm |
+| `mode_s_tests.c` | `mode_s.c` | #include | 19 | 5 | -lm |
 | `mode_ac_tests.c` | `mode_ac.c` | #include | 7 | 3 | -lm |
 | `comm_b_tests.c` | `comm_b.c` | #include | 11 | 3 | -lm |
 | `icao_filter_tests.c` | `icao_filter.c` | link .o | 7 | 3 | -lm |
 | `convert_tests.c` | `convert.c` | #include | 9 | 3 | -lm |
 | `util_tests.c` | `util.c` | link .o | 10 | 4 | -lm -lzstd -lz -lpthread -lrt |
 | `geomag_tests.c` | `geomag.c` | link .o | 6 | 0 | -lm |
-| `track_tests.c` | `track.c` | #include | 10 | 8 | -lm -lpthread |
+| `track_tests.c` | `track.c` | #include | 14 | 8 | -lm -lpthread |
 | `stats_tests.c` | `stats.c` | #include | 7 | 5 | -lm |
 | `net_io_tests.c` | `net_io.c` | #include | 8 | 12 | -lm -lzstd -lz -lpthread -lrt |
 | `json_out_tests.c` | `json_out.c` | #include | 8 | 14 | -lm -lz |

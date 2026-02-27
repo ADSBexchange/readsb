@@ -281,6 +281,35 @@ static void testDecodeCPRRelative(void) {
     fprintf(stderr, "testDecodeCPRRelative: done\n\n");
 }
 
+// ---- testDecodeCPRAirborneEdgeCases ----
+
+static void testDecodeCPRAirborneEdgeCases(void) {
+    fprintf(stderr, "=== testDecodeCPRAirborneEdgeCases ===\n");
+
+    double rlat, rlon;
+    int res;
+
+    // All zeros: even/odd lat/lon all 0 -> valid decode near 0,0
+    res = decodeCPRairborne(0, 0, 0, 0, 0, &rlat, &rlon);
+    ASSERT_EQ_INT("edge zeros result", res, 0);
+    ASSERT_EQ_DBL("edge zeros lat", rlat, 0.0, 1.0);
+    ASSERT_EQ_DBL("edge zeros lon", rlon, 0.0, 1.0);
+
+    // Max CPR values (2^17-1 = 131071): should not crash
+    res = decodeCPRairborne(131071, 131071, 131071, 131071, 0, &rlat, &rlon);
+    // May return 0 (valid) or -1 (error), just ensure no crash
+    ASSERT_TRUE("edge max no crash", res == 0 || res == -1);
+
+    // High-latitude pair: encode a near-pole position
+    // Use CPR values that would decode to high latitude
+    // even_cprlat=130000, odd_cprlat=130000 with small lon values
+    res = decodeCPRairborne(130000, 100, 130000, 100, 0, &rlat, &rlon);
+    // Just ensure no crash — result may or may not be valid
+    ASSERT_TRUE("edge pole no crash", res == 0 || res == -1);
+
+    fprintf(stderr, "testDecodeCPRAirborneEdgeCases: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -292,6 +321,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDecodeCPRAirborne();
     testDecodeCPRSurface();
     testDecodeCPRRelative();
+    testDecodeCPRAirborneEdgeCases();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

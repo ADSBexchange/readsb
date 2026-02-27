@@ -866,6 +866,494 @@ static void testScoreModesMessage(void) {
     fprintf(stderr, "testScoreModesMessage: done\n\n");
 }
 
+// ---- helper: setbit (single bit) ----
+
+static void setbit_me(unsigned char *me, unsigned bit) {
+    unsigned bi = bit - 1;
+    unsigned by = bi >> 3;
+    unsigned mask = 1u << (7 - (bi & 7));
+    me[by] |= mask;
+}
+
+// ---- testDecodeESSurfacePosition ----
+
+static void testDecodeESSurfacePosition(void) {
+    fprintf(stderr, "=== testDecodeESSurfacePosition ===\n");
+
+    // Mid-range movement (50): gs_valid=1, cpr_valid=1, cpr_type=CPR_SURFACE, airground=AG_GROUND
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 5;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 12, 50);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESSurfacePosition(&mm, 0);
+
+        ASSERT_EQ_INT("surf mid gs_valid", mm.gs_valid, 1);
+        ASSERT_TRUE("surf mid gs.v0>0", mm.gs.v0 > 0);
+        ASSERT_TRUE("surf mid gs.v2>0", mm.gs.v2 > 0);
+        ASSERT_EQ_INT("surf mid cpr_valid", mm.cpr_valid, 1);
+        ASSERT_EQ_INT("surf mid cpr_type", mm.cpr_type, CPR_SURFACE);
+        ASSERT_EQ_INT("surf mid airground", mm.airground, AG_GROUND);
+    }
+
+    // Movement=0 (no data): gs_valid stays 0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 5;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 12, 0);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESSurfacePosition(&mm, 0);
+
+        ASSERT_EQ_INT("surf mv0 gs_valid", mm.gs_valid, 0);
+        ASSERT_EQ_INT("surf mv0 cpr_valid", mm.cpr_valid, 1);
+    }
+
+    // Movement=125 (invalid): gs_valid stays 0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 5;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 12, 125);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESSurfacePosition(&mm, 0);
+
+        ASSERT_EQ_INT("surf mv125 gs_valid", mm.gs_valid, 0);
+    }
+
+    // Heading valid: bit 13 set, heading = 64*360/128 = 180.0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 5;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbit_me(me, 13);
+        setbits_me(me, 14, 20, 64);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESSurfacePosition(&mm, 0);
+
+        ASSERT_EQ_INT("surf hdg heading_valid", mm.heading_valid, 1);
+        ASSERT_FLOAT_NEAR("surf hdg 180", mm.heading, 180.0f, 0.1f);
+    }
+
+    // IMF flag + CPR odd
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 5;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbit_me(me, 21); // IMF flag
+        setbit_me(me, 22); // CPR odd
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESSurfacePosition(&mm, 1); // check_imf=1
+
+        ASSERT_TRUE("surf imf addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_EQ_INT("surf cpr_odd", mm.cpr_odd, 1);
+    }
+
+    fprintf(stderr, "testDecodeESSurfacePosition: done\n\n");
+}
+
+// ---- testDecodeESAirbornePosition ----
+
+static void testDecodeESAirbornePosition(void) {
+    fprintf(stderr, "=== testDecodeESAirbornePosition ===\n");
+
+    // Surveillance status 0: alert_valid=1, spi_valid=1, alert=0, spi=0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 9;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 0);
+        // Set AC12 and CPR to non-zero to avoid filtered case
+        setbits_me(me, 9, 20, 0x0B50); // FL350
+        setbits_me(me, 23, 39, 1);      // lat != 0
+        setbits_me(me, 40, 56, 1);      // lon != 0
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0);
+
+        ASSERT_EQ_INT("airpos ss0 alert_valid", mm.alert_valid, 1);
+        ASSERT_EQ_INT("airpos ss0 spi_valid", mm.spi_valid, 1);
+        ASSERT_EQ_INT("airpos ss0 alert", mm.alert, 0);
+        ASSERT_EQ_INT("airpos ss0 spi", mm.spi, 0);
+    }
+
+    // Surveillance status 3 (SPI): alert_valid=1, alert=0, spi_valid=1, spi=1
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 9;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 3);
+        setbits_me(me, 9, 20, 0x0B50);
+        setbits_me(me, 23, 39, 1);
+        setbits_me(me, 40, 56, 1);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0);
+
+        ASSERT_EQ_INT("airpos ss3 alert_valid", mm.alert_valid, 1);
+        ASSERT_EQ_INT("airpos ss3 alert", mm.alert, 0);
+        ASSERT_EQ_INT("airpos ss3 spi_valid", mm.spi_valid, 1);
+        ASSERT_EQ_INT("airpos ss3 spi", mm.spi, 1);
+    }
+
+    // NIC-B (check_imf=0): bit 8 set -> nic_b_valid=1, nic_b=1
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 9;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbit_me(me, 8);
+        setbits_me(me, 9, 20, 0x0B50);
+        setbits_me(me, 23, 39, 1);
+        setbits_me(me, 40, 56, 1);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0); // check_imf=0
+
+        ASSERT_EQ_INT("airpos nicb valid", mm.accuracy.nic_b_valid, 1);
+        ASSERT_EQ_UINT("airpos nicb value", mm.accuracy.nic_b, 1);
+    }
+
+    // metype=0: no position
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 0;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0);
+
+        ASSERT_EQ_INT("airpos me0 cpr_valid", mm.cpr_valid, 0);
+    }
+
+    // Baro alt (metype=9) vs geom alt (metype=20)
+    {
+        // metype=9: baro alt
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 9;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 9, 20, 0x0B50); // FL350
+        setbits_me(me, 23, 39, 1);
+        setbits_me(me, 40, 56, 1);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0);
+
+        ASSERT_EQ_INT("airpos baro valid", mm.baro_alt_valid, 1);
+        ASSERT_EQ_INT("airpos baro alt", mm.baro_alt, 35000);
+        ASSERT_EQ_INT("airpos geom not valid", mm.geom_alt_valid, 0);
+
+        // metype=20: geom alt
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 20;
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 9, 20, 0x0B50);
+        setbits_me(me, 23, 39, 1);
+        setbits_me(me, 40, 56, 1);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAirbornePosition(&mm, 0);
+
+        ASSERT_EQ_INT("airpos geom valid", mm.geom_alt_valid, 1);
+        ASSERT_EQ_INT("airpos geom alt", mm.geom_alt, 35000);
+        ASSERT_EQ_INT("airpos baro not valid", mm.baro_alt_valid, 0);
+    }
+
+    fprintf(stderr, "testDecodeESAirbornePosition: done\n\n");
+}
+
+// ---- testDecodeESTestMessage ----
+
+static void testDecodeESTestMessage(void) {
+    fprintf(stderr, "=== testDecodeESTestMessage ===\n");
+
+    // mesub=7, non-zero ID13: squawk_valid=1
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 23;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 7);           // mesub=7
+        setbits_me(me, 9, 21, 0x0800);     // ID13 field
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTestMessage(&mm);
+
+        ASSERT_EQ_INT("test mesub", mm.mesub, 7);
+        ASSERT_EQ_INT("test squawk_valid", mm.squawk_valid, 1);
+    }
+
+    // mesub=7, zero ID13: squawk_valid stays 0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 23;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 7);
+        // bits 9-21 all zero
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTestMessage(&mm);
+
+        ASSERT_EQ_INT("test zero mesub", mm.mesub, 7);
+        ASSERT_EQ_INT("test zero squawk_valid", mm.squawk_valid, 0);
+    }
+
+    // mesub=0: no squawk set
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 23;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTestMessage(&mm);
+
+        ASSERT_EQ_INT("test sub0 mesub", mm.mesub, 0);
+        ASSERT_EQ_INT("test sub0 squawk_valid", mm.squawk_valid, 0);
+    }
+
+    fprintf(stderr, "testDecodeESTestMessage: done\n\n");
+}
+
+// ---- testDecodeESAircraftStatus ----
+
+static void testDecodeESAircraftStatus(void) {
+    fprintf(stderr, "=== testDecodeESAircraftStatus ===\n");
+
+    // mesub=1, emergency + squawk
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 28;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1);           // mesub=1
+        setbits_me(me, 9, 11, 2);          // emergency=EMERGENCY_LIFEGUARD
+        setbits_me(me, 12, 24, 0x0800);    // ID13 non-zero
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAircraftStatus(&mm, 0);
+
+        ASSERT_EQ_INT("status emergency_valid", mm.emergency_valid, 1);
+        ASSERT_EQ_INT("status emergency", mm.emergency, 2);
+        ASSERT_EQ_INT("status squawk_valid", mm.squawk_valid, 1);
+    }
+
+    // mesub=1, zero ID13: emergency_valid=1, squawk_valid=0
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 28;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1);
+        setbits_me(me, 9, 11, 1); // emergency=EMERGENCY_GENERAL
+        // bits 12-24 all zero
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAircraftStatus(&mm, 0);
+
+        ASSERT_EQ_INT("status zero emergency_valid", mm.emergency_valid, 1);
+        ASSERT_EQ_INT("status zero squawk_valid", mm.squawk_valid, 0);
+    }
+
+    // mesub=1, IMF flag (check_imf=1, bit 56)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 28;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1);
+        setbit_me(me, 56); // IMF flag
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAircraftStatus(&mm, 1); // check_imf=1
+
+        ASSERT_TRUE("status imf addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+    }
+
+    // mesub=2: acas_ra_valid=1
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 28;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 2);
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESAircraftStatus(&mm, 0);
+
+        ASSERT_EQ_INT("status acas mesub", mm.mesub, 2);
+        ASSERT_EQ_INT("status acas_ra_valid", mm.acas_ra_valid, 1);
+    }
+
+    fprintf(stderr, "testDecodeESAircraftStatus: done\n\n");
+}
+
+// ---- testStringHelpers ----
+
+static void testStringHelpers(void) {
+    fprintf(stderr, "=== testStringHelpers ===\n");
+
+    // df_to_string
+    ASSERT_TRUE("df DF0", strcmp(df_to_string(0), "Short Air-Air Surveillance") == 0);
+    ASSERT_TRUE("df DF17", strcmp(df_to_string(17), "Extended Squitter") == 0);
+    ASSERT_TRUE("df DF32", strcmp(df_to_string(32), "Mode A/C Reply") == 0);
+    ASSERT_TRUE("df reserved", strcmp(df_to_string(1), "reserved") == 0);
+    ASSERT_TRUE("df modeac", strcmp(df_to_string(DFTYPE_MODEAC), "modeac") == 0);
+    ASSERT_TRUE("df out range", strcmp(df_to_string(99), "out of range") == 0);
+
+    // altitude_unit_to_string
+    ASSERT_TRUE("unit ft", strcmp(altitude_unit_to_string(UNIT_FEET), "ft") == 0);
+    ASSERT_TRUE("unit m", strcmp(altitude_unit_to_string(UNIT_METERS), "m") == 0);
+    ASSERT_TRUE("unit unk", strcmp(altitude_unit_to_string(99), "(unknown altitude unit)") == 0);
+
+    // heading_type_to_string
+    ASSERT_TRUE("hdg ground", strcmp(heading_type_to_string(HEADING_GROUND_TRACK), "Ground track") == 0);
+    ASSERT_TRUE("hdg mag", strcmp(heading_type_to_string(HEADING_MAGNETIC), "Mag heading") == 0);
+    ASSERT_TRUE("hdg true", strcmp(heading_type_to_string(HEADING_TRUE), "True heading") == 0);
+    ASSERT_TRUE("hdg mor", strcmp(heading_type_to_string(HEADING_MAGNETIC_OR_TRUE), "Heading") == 0);
+    ASSERT_TRUE("hdg toh", strcmp(heading_type_to_string(HEADING_TRACK_OR_HEADING), "Track/Heading") == 0);
+    ASSERT_TRUE("hdg unk", strcmp(heading_type_to_string(99), "unknown heading type") == 0);
+
+    // sil_type_to_string
+    ASSERT_TRUE("sil unk", strcmp(sil_type_to_string(SIL_UNKNOWN), "unknown type") == 0);
+    ASSERT_TRUE("sil hour", strcmp(sil_type_to_string(SIL_PER_HOUR), "per flight hour") == 0);
+    ASSERT_TRUE("sil sample", strcmp(sil_type_to_string(SIL_PER_SAMPLE), "per sample") == 0);
+    ASSERT_TRUE("sil inv", strcmp(sil_type_to_string(99), "invalid type") == 0);
+
+    // emergency_to_string
+    ASSERT_TRUE("emg none", strcmp(emergency_to_string(EMERGENCY_NONE), "no emergency") == 0);
+    ASSERT_TRUE("emg gen", strcmp(emergency_to_string(EMERGENCY_GENERAL), "general emergency (7700)") == 0);
+    ASSERT_TRUE("emg life", strcmp(emergency_to_string(EMERGENCY_LIFEGUARD), "lifeguard / medical emergency") == 0);
+    ASSERT_TRUE("emg fuel", strcmp(emergency_to_string(EMERGENCY_MINFUEL), "minimum fuel") == 0);
+    ASSERT_TRUE("emg nordo", strcmp(emergency_to_string(EMERGENCY_NORDO), "no communications (7600)") == 0);
+    ASSERT_TRUE("emg unlaw", strcmp(emergency_to_string(EMERGENCY_UNLAWFUL), "unlawful interference (7500)") == 0);
+    ASSERT_TRUE("emg downed", strcmp(emergency_to_string(EMERGENCY_DOWNED), "downed aircraft") == 0);
+    ASSERT_TRUE("emg rsv", strcmp(emergency_to_string(99), "reserved") == 0);
+
+    fprintf(stderr, "testStringHelpers: done\n\n");
+}
+
+// ---- testCommBFormatAndNavModesStrings ----
+
+static void testCommBFormatAndNavModesStrings(void) {
+    fprintf(stderr, "=== testCommBFormatAndNavModesStrings ===\n");
+
+    // commb_format_to_string
+    ASSERT_TRUE("commb empty", strcmp(commb_format_to_string(COMMB_EMPTY_RESPONSE), "empty response") == 0);
+    ASSERT_TRUE("commb ambig", strcmp(commb_format_to_string(COMMB_AMBIGUOUS), "ambiguous format") == 0);
+    ASSERT_TRUE("commb datacap", strcmp(commb_format_to_string(COMMB_DATALINK_CAPS), "BDS1,0 Datalink capabilities") == 0);
+    ASSERT_TRUE("commb gicb", strcmp(commb_format_to_string(COMMB_GICB_CAPS), "BDS1,7 Common usage GICB capabilities") == 0);
+    ASSERT_TRUE("commb ident", strcmp(commb_format_to_string(COMMB_AIRCRAFT_IDENT), "BDS2,0 Aircraft identification") == 0);
+    ASSERT_TRUE("commb acas", strcmp(commb_format_to_string(COMMB_ACAS_RA), "BDS3,0 ACAS resolution advisory") == 0);
+    ASSERT_TRUE("commb vert", strcmp(commb_format_to_string(COMMB_VERTICAL_INTENT), "BDS4,0 Selected vertical intention") == 0);
+    ASSERT_TRUE("commb track", strcmp(commb_format_to_string(COMMB_TRACK_TURN), "BDS5,0 Track and turn report") == 0);
+    ASSERT_TRUE("commb hdgspd", strcmp(commb_format_to_string(COMMB_HEADING_SPEED), "BDS6,0 Heading and speed report") == 0);
+    ASSERT_TRUE("commb meteo", strcmp(commb_format_to_string(COMMB_METEOROLOGICAL_ROUTINE), "BDS4,4 Meteorological routine air report") == 0);
+    ASSERT_TRUE("commb unk", strcmp(commb_format_to_string(99), "unknown format") == 0);
+
+    // nav_modes_to_string: zero flags -> empty string
+    ASSERT_TRUE("nav zero", strcmp(nav_modes_to_string(0), "") == 0);
+
+    // Single flag
+    ASSERT_TRUE("nav autopilot", strcmp(nav_modes_to_string(NAV_MODE_AUTOPILOT), "autopilot") == 0);
+    ASSERT_TRUE("nav vnav", strcmp(nav_modes_to_string(NAV_MODE_VNAV), "vnav") == 0);
+    ASSERT_TRUE("nav tcas", strcmp(nav_modes_to_string(NAV_MODE_TCAS), "tcas") == 0);
+
+    // Multiple flags
+    {
+        const char *result = nav_modes_to_string(NAV_MODE_AUTOPILOT | NAV_MODE_VNAV | NAV_MODE_LNAV);
+        ASSERT_TRUE("nav multi has autopilot", strstr(result, "autopilot") != NULL);
+        ASSERT_TRUE("nav multi has vnav", strstr(result, "vnav") != NULL);
+        ASSERT_TRUE("nav multi has lnav", strstr(result, "lnav") != NULL);
+    }
+
+    // All flags
+    {
+        nav_modes_t all = NAV_MODE_AUTOPILOT | NAV_MODE_VNAV | NAV_MODE_ALT_HOLD |
+                          NAV_MODE_APPROACH | NAV_MODE_LNAV | NAV_MODE_TCAS;
+        const char *result = nav_modes_to_string(all);
+        ASSERT_TRUE("nav all has autopilot", strstr(result, "autopilot") != NULL);
+        ASSERT_TRUE("nav all has tcas", strstr(result, "tcas") != NULL);
+        ASSERT_TRUE("nav all has althold", strstr(result, "althold") != NULL);
+        ASSERT_TRUE("nav all has approach", strstr(result, "approach") != NULL);
+    }
+
+    fprintf(stderr, "testCommBFormatAndNavModesStrings: done\n\n");
+}
+
+// ---- testEsTypeNameAndHasSubtype ----
+
+static void testEsTypeNameAndHasSubtype(void) {
+    fprintf(stderr, "=== testEsTypeNameAndHasSubtype ===\n");
+
+    // esTypeHasSubtype
+    for (unsigned me = 0; me <= 18; me++) {
+        char tag[32];
+        snprintf(tag, sizeof(tag), "hasSubtype me%u", me);
+        ASSERT_EQ_INT(tag, esTypeHasSubtype(me), 0);
+    }
+    ASSERT_EQ_INT("hasSubtype me19", esTypeHasSubtype(19), 1);
+    ASSERT_EQ_INT("hasSubtype me20", esTypeHasSubtype(20), 0);
+    ASSERT_EQ_INT("hasSubtype me21", esTypeHasSubtype(21), 0);
+    ASSERT_EQ_INT("hasSubtype me22", esTypeHasSubtype(22), 0);
+    for (unsigned me = 23; me <= 31; me++) {
+        char tag[32];
+        snprintf(tag, sizeof(tag), "hasSubtype me%u", me);
+        ASSERT_EQ_INT(tag, esTypeHasSubtype(me), 1);
+    }
+
+    // esTypeName: spot-check various types
+    ASSERT_TRUE("esName me0", strcmp(esTypeName(0, 0), "No position information (airborne or surface)") == 0);
+    ASSERT_TRUE("esName me4", strcmp(esTypeName(4, 0), "Aircraft identification and category") == 0);
+    ASSERT_TRUE("esName me7", strcmp(esTypeName(7, 0), "Surface position") == 0);
+    ASSERT_TRUE("esName me11", strcmp(esTypeName(11, 0), "Airborne position (barometric altitude)") == 0);
+    ASSERT_TRUE("esName me19s1", strcmp(esTypeName(19, 1), "Airborne velocity over ground, subsonic") == 0);
+    ASSERT_TRUE("esName me19s5", strcmp(esTypeName(19, 5), "Unknown") == 0);
+    ASSERT_TRUE("esName me23s0", strcmp(esTypeName(23, 0), "Test message") == 0);
+    ASSERT_TRUE("esName me23s7", strcmp(esTypeName(23, 7), "National use / 1090-WP-15-20 Mode A squawk") == 0);
+    ASSERT_TRUE("esName me28s1", strcmp(esTypeName(28, 1), "Emergency/priority status") == 0);
+    ASSERT_TRUE("esName me28s2", strcmp(esTypeName(28, 2), "ACAS RA broadcast") == 0);
+    ASSERT_TRUE("esName me31s0", strcmp(esTypeName(31, 0), "Aircraft operational status (airborne)") == 0);
+    ASSERT_TRUE("esName me31s1", strcmp(esTypeName(31, 1), "Aircraft operational status (surface)") == 0);
+    ASSERT_TRUE("esName me25", strcmp(esTypeName(25, 0), "Unknown") == 0);
+
+    fprintf(stderr, "testEsTypeNameAndHasSubtype: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -883,6 +1371,13 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testSetSquawkFromID13();
     testFixDF17msgtype();
     testScoreModesMessage();
+    testDecodeESSurfacePosition();
+    testDecodeESAirbornePosition();
+    testDecodeESTestMessage();
+    testDecodeESAircraftStatus();
+    testStringHelpers();
+    testCommBFormatAndNavModesStrings();
+    testEsTypeNameAndHasSubtype();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

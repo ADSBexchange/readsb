@@ -646,6 +646,196 @@ static void testWillAcceptData(void) {
     fprintf(stderr, "testWillAcceptData: done\n\n");
 }
 
+// ---- testTimeBetween ----
+
+static void testTimeBetween(void) {
+    fprintf(stderr, "=== testTimeBetween ===\n");
+
+    // t1 > t2
+    ASSERT_EQ_I64("time t1>t2", time_between(1000, 700), 300);
+
+    // t1 < t2
+    ASSERT_EQ_I64("time t1<t2", time_between(500, 900), 400);
+
+    // t1 == t2
+    ASSERT_EQ_I64("time t1==t2", time_between(1234, 1234), 0);
+
+    fprintf(stderr, "testTimeBetween: done\n\n");
+}
+
+// ---- testCombineValidity ----
+
+static void testCombineValidity(void) {
+    fprintf(stderr, "=== testCombineValidity ===\n");
+
+    int64_t now = 1000000;
+
+    // from1 SOURCE_INVALID -> result = *from2
+    {
+        data_validity to, from1, from2;
+        memset(&to, 0, sizeof(to));
+        memset(&from1, 0, sizeof(from1));
+        memset(&from2, 0, sizeof(from2));
+        from1.source = SOURCE_INVALID;
+        from2.source = SOURCE_ADSB;
+        from2.updated = 500;
+        combine_validity(&to, &from1, &from2, now);
+        ASSERT_EQ_INT("comb inv1 source", to.source, SOURCE_ADSB);
+        ASSERT_EQ_I64("comb inv1 updated", to.updated, 500);
+    }
+
+    // from2 SOURCE_INVALID -> result = *from1
+    {
+        data_validity to, from1, from2;
+        memset(&to, 0, sizeof(to));
+        memset(&from1, 0, sizeof(from1));
+        memset(&from2, 0, sizeof(from2));
+        from1.source = SOURCE_MLAT;
+        from1.updated = 800;
+        from2.source = SOURCE_INVALID;
+        combine_validity(&to, &from1, &from2, now);
+        ASSERT_EQ_INT("comb inv2 source", to.source, SOURCE_MLAT);
+        ASSERT_EQ_I64("comb inv2 updated", to.updated, 800);
+    }
+
+    // Both valid, different sources: takes worse source, later timestamp
+    {
+        data_validity to, from1, from2;
+        memset(&to, 0, sizeof(to));
+        memset(&from1, 0, sizeof(from1));
+        memset(&from2, 0, sizeof(from2));
+        from1.source = SOURCE_ADSB;    // better
+        from1.updated = 100;
+        from2.source = SOURCE_MLAT;    // worse
+        from2.updated = 200;
+        combine_validity(&to, &from1, &from2, now);
+        ASSERT_EQ_INT("comb both source", to.source, SOURCE_MLAT); // worse
+        ASSERT_EQ_I64("comb both updated", to.updated, 200);       // later
+    }
+
+    // Stale calculation: now > updated + TRACK_STALE
+    {
+        data_validity to, from1, from2;
+        memset(&to, 0, sizeof(to));
+        memset(&from1, 0, sizeof(from1));
+        memset(&from2, 0, sizeof(from2));
+        from1.source = SOURCE_ADSB;
+        from1.updated = 100;
+        from2.source = SOURCE_MLAT;
+        from2.updated = 200;
+        int64_t future_now = 200 + TRACK_STALE + 1; // past stale threshold
+        combine_validity(&to, &from1, &from2, future_now);
+        ASSERT_EQ_INT("comb stale", to.stale, 1);
+    }
+
+    fprintf(stderr, "testCombineValidity: done\n\n");
+}
+
+// ---- testCompareValidity ----
+
+static void testCompareValidity(void) {
+    fprintf(stderr, "=== testCompareValidity ===\n");
+
+    // lhs better source, not stale -> returns 1
+    {
+        data_validity lhs, rhs;
+        memset(&lhs, 0, sizeof(lhs));
+        memset(&rhs, 0, sizeof(rhs));
+        lhs.source = SOURCE_ADSB;
+        lhs.stale = 0;
+        rhs.source = SOURCE_MLAT;
+        ASSERT_EQ_INT("compare lhs better", compare_validity(&lhs, &rhs), 1);
+    }
+
+    // rhs better source, not stale -> returns -1
+    {
+        data_validity lhs, rhs;
+        memset(&lhs, 0, sizeof(lhs));
+        memset(&rhs, 0, sizeof(rhs));
+        lhs.source = SOURCE_MLAT;
+        rhs.source = SOURCE_ADSB;
+        rhs.stale = 0;
+        ASSERT_EQ_INT("compare rhs better", compare_validity(&lhs, &rhs), -1);
+    }
+
+    // Equal source, lhs newer -> returns 1
+    {
+        data_validity lhs, rhs;
+        memset(&lhs, 0, sizeof(lhs));
+        memset(&rhs, 0, sizeof(rhs));
+        lhs.source = SOURCE_ADSB;
+        lhs.stale = 0;
+        lhs.updated = 200;
+        rhs.source = SOURCE_ADSB;
+        rhs.stale = 0;
+        rhs.updated = 100;
+        ASSERT_EQ_INT("compare lhs newer", compare_validity(&lhs, &rhs), 1);
+    }
+
+    // Equal source, rhs newer -> returns -1
+    {
+        data_validity lhs, rhs;
+        memset(&lhs, 0, sizeof(lhs));
+        memset(&rhs, 0, sizeof(rhs));
+        lhs.source = SOURCE_ADSB;
+        lhs.stale = 0;
+        lhs.updated = 100;
+        rhs.source = SOURCE_ADSB;
+        rhs.stale = 0;
+        rhs.updated = 200;
+        ASSERT_EQ_INT("compare rhs newer", compare_validity(&lhs, &rhs), -1);
+    }
+
+    fprintf(stderr, "testCompareValidity: done\n\n");
+}
+
+// ---- testCprGlobalAirborneMaxElapsed ----
+
+static void testCprGlobalAirborneMaxElapsed(void) {
+    fprintf(stderr, "=== testCprGlobalAirborneMaxElapsed ===\n");
+
+    struct aircraft a;
+    int64_t now = 1000000;
+
+    // Stale gs (>20s old): returns 10*SECONDS
+    {
+        memset(&a, 0, sizeof(a));
+        a.gs_valid.source = SOURCE_ADSB;
+        a.gs_valid.updated = now - 21 * SECONDS; // 21s old
+        a.gs = 500;
+        ASSERT_EQ_I64("cpr stale gs", cpr_global_airborne_max_elapsed(now, &a), 10 * SECONDS);
+    }
+
+    // 500kt gs, fresh: returns 19*SECONDS (ref=19s, 19*500/500=19s)
+    {
+        memset(&a, 0, sizeof(a));
+        a.gs_valid.source = SOURCE_ADSB;
+        a.gs_valid.updated = now - 5 * SECONDS; // 5s old, fresh
+        a.gs = 500;
+        ASSERT_EQ_I64("cpr 500kt", cpr_global_airborne_max_elapsed(now, &a), 19 * SECONDS);
+    }
+
+    // 250kt (slow, capped at 30s): min(30s, 19*500/250=38s) = 30s
+    {
+        memset(&a, 0, sizeof(a));
+        a.gs_valid.source = SOURCE_ADSB;
+        a.gs_valid.updated = now - 5 * SECONDS;
+        a.gs = 250;
+        ASSERT_EQ_I64("cpr 250kt", cpr_global_airborne_max_elapsed(now, &a), 30 * SECONDS);
+    }
+
+    // 1000kt (fast): 19*500/1000 = 9500ms = 9.5s
+    {
+        memset(&a, 0, sizeof(a));
+        a.gs_valid.source = SOURCE_ADSB;
+        a.gs_valid.updated = now - 5 * SECONDS;
+        a.gs = 1000;
+        ASSERT_EQ_I64("cpr 1000kt", cpr_global_airborne_max_elapsed(now, &a), 9500);
+    }
+
+    fprintf(stderr, "testCprGlobalAirborneMaxElapsed: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -659,6 +849,10 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testCalculateMessageRate();
     testCalculateMessageRateGlobal();
     testWillAcceptData();
+    testTimeBetween();
+    testCombineValidity();
+    testCompareValidity();
+    testCprGlobalAirborneMaxElapsed();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
