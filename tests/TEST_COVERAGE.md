@@ -1,15 +1,15 @@
 # readsb Test Coverage Reference
 
-Last updated: 2026-02-26
+Last updated: 2026-02-27
 
 ## Summary
 
 | Category | Count |
 |----------|-------|
 | Unit test binaries | 22 |
-| Unit test functions | ~210 |
+| Unit test functions | ~215 |
 | Integration test files | 13 |
-| Integration test functions | 87 |
+| Integration test functions | 90 |
 
 ## Unit Tests
 
@@ -39,10 +39,10 @@ Last updated: 2026-02-26
 | `convert_tests.c` | `convert.c` | #include | 9 | 3 | -lm |
 | `util_tests.c` | `util.c` | link .o | 10 | 4 | -lm -lzstd -lz -lpthread -lrt |
 | `geomag_tests.c` | `geomag.c` | link .o | 6 | 0 | -lm |
-| `track_tests.c` | `track.c` | #include | 19 | 8 | -lm -lpthread |
+| `track_tests.c` | `track.c` | #include | 20 | 8 | -lm -lpthread |
 | `stats_tests.c` | `stats.c` | #include | 7 | 5 | -lm |
 | `net_io_tests.c` | `net_io.c` | #include | 20 | 12 | -lm -lzstd -lz -lpthread -lrt |
-| `json_out_tests.c` | `json_out.c` | #include | 8 | 14 | -lm -lz |
+| `json_out_tests.c` | `json_out.c` | #include | 9 | 14 | -lm -lz |
 | `api_tests.c` | `api.c` | #include | 15 | 10 | -lm -lzstd -lz -lpthread -lrt |
 | `aircraft_tests.c` | `aircraft.c` | #include | 10 | 8 | -lm -lz |
 | `demod_tests.c` | `demod_2400.c` | #include | 9 | 5 | -lm |
@@ -98,7 +98,7 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_network.py` | TestConnectionResilience, TestMultipleClients, TestNetConnector, TestNetConnectorBeastOut | 7 | Reconnection, multi-client, net-connector SBS/Beast |
 | `test_output_formats.py` | TestStatsJson, TestVrsJsonOutput, TestJsonNetworkOutput | 3 | stats.json, VRS JSON, JSON-over-TCP |
 | `test_lifecycle.py` | TestShutdown, TestAircraftStaleness | 2 | SIGTERM shutdown, seen-time staleness |
-| `test_uav.py` | TestUav, TestUavApi, TestUavRejected | 8 | UAV/drone support, API queries, --enable-uav gate |
+| `test_uav.py` | TestUav, TestUavApi, TestUavRejected, TestUavFilterApi | 11 | UAV/drone support, API queries, --enable-uav gate, filter_uav with db |
 | `test_net_connector.py` | TestBeastDF17Input, TestMultiSource | 5 | Beast DF17 position, multi-source (SBS+Beast) |
 | `test_stats_and_history.py` | TestReceiverJson, TestJsonFileWriting | 9 | receiver.json, aircraft.json, file updates, message counts |
 

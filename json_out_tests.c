@@ -336,6 +336,62 @@ static void testNavModesFlagsString(void) {
     fprintf(stderr, "testNavModesFlagsString: done\n\n");
 }
 
+// ---- testSprintAircraftObjectUavPrefix ----
+
+static void testSprintAircraftObjectUavPrefix(void) {
+    fprintf(stderr, "=== testSprintAircraftObjectUavPrefix ===\n");
+
+    char buf[4096];
+    int64_t now = mstime();
+
+    // Case 1: UAV address → "$" prefix
+    {
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.addrtype = ADDR_UAV;
+        a.addr = 0x000001;
+        char *p = sprintAircraftObject(buf, buf + sizeof(buf), &a, now, 0, NULL);
+        *p = '\0';
+        ASSERT_TRUE("uav $ prefix", strstr(buf, "\"hex\":\"$000001\"") != NULL);
+        ASSERT_TRUE("uav type", strstr(buf, "\"type\":\"adsb_other\"") != NULL);
+    }
+
+    // Case 2: Non-ICAO address → "~" prefix
+    {
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.addrtype = ADDR_TISB_OTHER;
+        a.addr = 0x000002 | MODES_NON_ICAO_ADDRESS;
+        char *p = sprintAircraftObject(buf, buf + sizeof(buf), &a, now, 0, NULL);
+        *p = '\0';
+        ASSERT_TRUE("non-icao ~ prefix", strstr(buf, "\"hex\":\"~000002\"") != NULL);
+    }
+
+    // Case 3: Normal ICAO address → no prefix
+    {
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.addrtype = ADDR_ADSB_ICAO;
+        a.addr = 0xABCDEF;
+        char *p = sprintAircraftObject(buf, buf + sizeof(buf), &a, now, 0, NULL);
+        *p = '\0';
+        ASSERT_TRUE("icao no prefix", strstr(buf, "\"hex\":\"abcdef\"") != NULL);
+    }
+
+    // Case 4: printMode=1 (trace) skips hex entirely
+    {
+        struct aircraft a;
+        memset(&a, 0, sizeof(a));
+        a.addrtype = ADDR_UAV;
+        a.addr = 0x000001;
+        char *p = sprintAircraftObject(buf, buf + sizeof(buf), &a, now, 1, NULL);
+        *p = '\0';
+        ASSERT_TRUE("trace no hex", strstr(buf, "\"hex\"") == NULL);
+    }
+
+    fprintf(stderr, "testSprintAircraftObjectUavPrefix: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -345,6 +401,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testGetSignal();
     testAppendFlags();
     testNavModesFlagsString();
+    testSprintAircraftObjectUavPrefix();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

@@ -306,52 +306,60 @@ static void testFilterAltBaro(void) {
 static void testFilterDbFlags(void) {
     fprintf(stderr, "=== testFilterDbFlags ===\n");
 
-    struct apiEntry haystack[4];
+    struct apiEntry haystack[5];
     memset(haystack, 0, sizeof(haystack));
-    haystack[0].bin.dbFlags = 1;
-    haystack[1].bin.dbFlags = 2;
-    haystack[2].bin.dbFlags = 4;
-    haystack[3].bin.dbFlags = 8;
+    haystack[0].bin.dbFlags = 1;   // mil
+    haystack[1].bin.dbFlags = 2;   // interesting
+    haystack[2].bin.dbFlags = 4;   // pia
+    haystack[3].bin.dbFlags = 8;   // ladd
+    haystack[4].bin.dbFlags = 16;  // uav
 
-    struct apiEntry matches[4];
+    struct apiEntry matches[5];
     struct apiOptions options;
     size_t alloc;
 
     memset(&options, 0, sizeof(options));
     options.filter_mil = 1;
     alloc = 0;
-    int count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
+    int count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
     ASSERT_INT_EQ("dbflags mil count", count, 1);
     ASSERT_TRUE("dbflags mil hex", matches[0].bin.dbFlags == 1);
 
     memset(&options, 0, sizeof(options));
     options.filter_interesting = 1;
     alloc = 0;
-    count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
     ASSERT_INT_EQ("dbflags interesting", count, 1);
 
     memset(&options, 0, sizeof(options));
     options.filter_pia = 1;
     alloc = 0;
-    count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
     ASSERT_INT_EQ("dbflags pia", count, 1);
 
     memset(&options, 0, sizeof(options));
     options.filter_ladd = 1;
     alloc = 0;
-    count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
     ASSERT_INT_EQ("dbflags ladd", count, 1);
 
     memset(&options, 0, sizeof(options));
-    options.filter_mil = 1;
-    options.filter_interesting = 1;
+    options.filter_uav = 1;
     alloc = 0;
-    count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
-    ASSERT_INT_EQ("dbflags mil|int", count, 2);
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
+    ASSERT_INT_EQ("dbflags uav count", count, 1);
+    ASSERT_TRUE("dbflags uav flag", matches[0].bin.dbFlags == 16);
+
+    memset(&options, 0, sizeof(options));
+    options.filter_mil = 1;
+    options.filter_uav = 1;
+    alloc = 0;
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
+    ASSERT_INT_EQ("dbflags mil|uav", count, 2);
 
     memset(&options, 0, sizeof(options));
     alloc = 0;
-    count = filter_dbFlags(haystack, 4, matches, &alloc, &options);
+    count = filter_dbFlags(haystack, 5, matches, &alloc, &options);
     ASSERT_INT_EQ("dbflags none", count, 0);
 
     fprintf(stderr, "testFilterDbFlags: done\n\n");

@@ -1123,6 +1123,80 @@ static void testAcceptData(void) {
     fprintf(stderr, "testAcceptData: done\n\n");
 }
 
+// ---- testUavCategoryOverride ----
+
+static void testUavCategoryOverride(void) {
+    fprintf(stderr, "=== testUavCategoryOverride ===\n");
+
+    // Case 1: mm->addrtype == ADDR_UAV → category forced to 0xB6
+    {
+        memset(&dummy_aircraft, 0, sizeof(dummy_aircraft));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.sbs_in = 1;
+        mm.source = SOURCE_SBS;
+        mm.addrtype = ADDR_UAV;
+        mm.addr = MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS | 0x000001;
+        mm.sysTimestamp = mstime();
+
+        trackUpdateFromMessage(&mm);
+        ASSERT_EQ_U16("uav mm->addrtype category", dummy_aircraft.category, 0xB6);
+        ASSERT_TRUE("uav mm->addrtype cat_updated", dummy_aircraft.category_updated > 0);
+    }
+
+    // Case 2: a->addrtype already ADDR_UAV → category forced to 0xB6
+    // even when mm->addrtype is something else
+    {
+        memset(&dummy_aircraft, 0, sizeof(dummy_aircraft));
+        dummy_aircraft.addrtype = ADDR_UAV;
+        dummy_aircraft.addrtype_updated = mstime();
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.sbs_in = 1;
+        mm.source = SOURCE_SBS;
+        mm.addrtype = ADDR_ADSB_ICAO;
+        mm.addr = 0xABCDEF;
+        mm.sysTimestamp = mstime();
+
+        trackUpdateFromMessage(&mm);
+        ASSERT_EQ_U16("uav a->addrtype category", dummy_aircraft.category, 0xB6);
+    }
+
+    // Case 3: Normal ICAO aircraft → category NOT forced to 0xB6
+    {
+        memset(&dummy_aircraft, 0, sizeof(dummy_aircraft));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.sbs_in = 1;
+        mm.source = SOURCE_SBS;
+        mm.addrtype = ADDR_ADSB_ICAO;
+        mm.addr = 0xABCDEF;
+        mm.sysTimestamp = mstime();
+
+        trackUpdateFromMessage(&mm);
+        ASSERT_TRUE("normal icao no B6", dummy_aircraft.category != 0xB6);
+    }
+
+    // Case 4: UAV with category_valid in message → B6 overrides message category
+    {
+        memset(&dummy_aircraft, 0, sizeof(dummy_aircraft));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.sbs_in = 1;
+        mm.source = SOURCE_SBS;
+        mm.addrtype = ADDR_UAV;
+        mm.addr = MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS | 0x000002;
+        mm.sysTimestamp = mstime();
+        mm.category_valid = 1;
+        mm.category = 0xA1;  // this should get overridden by B6
+
+        trackUpdateFromMessage(&mm);
+        ASSERT_EQ_U16("uav overrides msg cat", dummy_aircraft.category, 0xB6);
+    }
+
+    fprintf(stderr, "testUavCategoryOverride: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -1145,6 +1219,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDuplicateCheck();
     testUat2esntDuplicate();
     testAcceptData();
+    testUavCategoryOverride();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

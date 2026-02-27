@@ -212,5 +212,120 @@ class TestUavRejected(unittest.TestCase):
             self.assertNotIn("$000001", hexes)
 
 
+# ===================================================================
+# E: UAV filter_uav API with database file
+# ===================================================================
+
+def _make_db_csv(path):
+    """Write a minimal aircraft db CSV with UAV-flagged and normal entries.
+
+    Format: hex;registration;typeCode;dbFlags;typeLong;year;owner;
+    (trailing semicolon required — nextToken needs ';' after every field)
+    dbFlags is a binary string, bit 4 = UAV.
+    File must be >= 1000 bytes.
+    """
+    uav_flags = "00001" + "0" * 27  # bit 4 set (UAV)
+    no_flags  = "0" * 32
+    lines = [
+        # UAV entry: $-prefixed hex with dbFlags bit 4
+        f"$000010;DRN010;UAV;{uav_flags};TestDrone;2024;TestOp;",
+        # Normal ICAO entry: no UAV flag
+        f"AAAAAA;N12345;B738;{no_flags};Boeing 737-800;2015;TestAirline;",
+    ]
+    content = "\n".join(lines) + "\n"
+    # Pad to >= 1000 bytes with dummy entries (7 semicolons = 8 fields, addr=0 → skipped)
+    while len(content.encode()) < 1100:
+        content += "000000;;;;;;;\n"
+    Path(path).write_text(content)
+
+
+class TestUavFilterApi(unittest.TestCase):
+    """Test /?filter_uav API endpoint with a database file."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile as _tf
+        cls._db_dir = _tf.mkdtemp(prefix="readsb-db-")
+        cls._db_path = str(Path(cls._db_dir) / "aircraft.csv")
+        _make_db_csv(cls._db_path)
+
+        cls.inst = ReadsbInstance(extra_args=[
+            "--enable-uav", "--lat", "51.5", "--lon", "-0.1",
+            "--db-file", cls._db_path,
+        ])
+        cls.inst.__enter__()
+
+        # Give db loading time (dbUpdate runs in background thread,
+        # dbFinishUpdate swaps in main loop)
+        time.sleep(2)
+
+        # Feed a UAV and a normal ICAO aircraft repeatedly to ensure
+        # the db has time to load and updateTypeReg propagates dbFlags.
+        # dbUpdate runs every 30s from startup (first check at t=0),
+        # and dbFinishUpdate re-runs updateTypeReg on all aircraft.
+        feeder = cls.inst.feeder()
+        for _ in range(8):
+            feed_sbs(feeder, [
+                sbs_msg3("$000010", alt=500, lat=51.5, lon=-0.1),
+                sbs_msg3("AAAAAA", alt=35000, lat=51.5, lon=-0.1),
+            ])
+            time.sleep(0.5)
+
+        # Wait for aircraft to appear in JSON
+        poll_aircraft_json(cls.inst.tmpdir, want_hex="$000010")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.inst.__exit__(None, None, None)
+        import shutil as _sh
+        _sh.rmtree(cls._db_dir, ignore_errors=True)
+
+    def _api_get(self, query):
+        """Issue a GET to the API and return (status, data_dict)."""
+        conn = HTTPConnection("127.0.0.1", self.inst.api_port, timeout=5)
+        conn.request("GET", query)
+        resp = conn.getresponse()
+        status = resp.status
+        body = resp.read()
+        conn.close()
+        if status == 200:
+            return status, json.loads(body)
+        return status, {}
+
+    def test_e1_filter_uav_recognized(self):
+        """/?all&filter_uav returns 200 (recognized parameter)."""
+        status, _ = self._api_get("/?all&filter_uav")
+        self.assertEqual(status, 200, "filter_uav should be a recognized parameter")
+
+    def test_e2_filter_uav_returns_uav(self):
+        """/?all&filter_uav returns the UAV aircraft (db flag bit 4 match)."""
+        # First verify the aircraft exists via /?all
+        status, all_data = self._api_get("/?all")
+        self.assertEqual(status, 200)
+        all_hexes = {a["hex"] for a in all_data.get("aircraft", [])}
+        self.assertIn("$000010", all_hexes, "UAV should exist in /?all")
+
+        # Check dbFlags on the aircraft (may need db loading time)
+        uav_ac = [a for a in all_data.get("aircraft", []) if a["hex"] == "$000010"]
+        if uav_ac:
+            db_flags = uav_ac[0].get("dbFlags", 0)
+            self.assertTrue(db_flags & 16,
+                            f"UAV dbFlags should have bit 4 set, got {db_flags}")
+
+        # Now check filter_uav endpoint
+        status, data = self._api_get("/?all&filter_uav")
+        self.assertEqual(status, 200)
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertIn("$000010", hexes, "UAV should appear in filter_uav results")
+
+    def test_e3_filter_uav_excludes_icao(self):
+        """/?all&filter_uav does NOT return normal ICAO aircraft."""
+        status, data = self._api_get("/?all&filter_uav")
+        self.assertEqual(status, 200)
+        hexes = {a["hex"] for a in data.get("aircraft", [])}
+        self.assertNotIn("aaaaaa", hexes,
+                         "Normal ICAO aircraft should not appear in filter_uav results")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
