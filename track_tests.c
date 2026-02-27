@@ -836,6 +836,293 @@ static void testCprGlobalAirborneMaxElapsed(void) {
     fprintf(stderr, "testCprGlobalAirborneMaxElapsed: done\n\n");
 }
 
+// ---- testComputeV0Nacp ----
+
+static void testComputeV0Nacp(void) {
+    fprintf(stderr, "=== testComputeV0Nacp ===\n");
+
+    struct modesMessage mm;
+
+    // msgtype != 17 or 18 -> -1
+    memset(&mm, 0, sizeof(mm));
+    mm.msgtype = 11;
+    mm.metype = 5;
+    ASSERT_EQ_INT("v0nacp wrong msgtype", compute_v0_nacp(&mm), -1);
+
+    // msgtype=17, metype=0 -> 0
+    memset(&mm, 0, sizeof(mm));
+    mm.msgtype = 17;
+    mm.metype = 0;
+    ASSERT_EQ_INT("v0nacp me0", compute_v0_nacp(&mm), 0);
+
+    // metype=5 -> 11
+    mm.metype = 5;
+    ASSERT_EQ_INT("v0nacp me5", compute_v0_nacp(&mm), 11);
+
+    // metype=8 -> 0
+    mm.metype = 8;
+    ASSERT_EQ_INT("v0nacp me8", compute_v0_nacp(&mm), 0);
+
+    // metype=13 -> 6
+    mm.metype = 13;
+    ASSERT_EQ_INT("v0nacp me13", compute_v0_nacp(&mm), 6);
+
+    // metype=20 -> 11
+    mm.metype = 20;
+    ASSERT_EQ_INT("v0nacp me20", compute_v0_nacp(&mm), 11);
+
+    // msgtype=18 works too
+    mm.msgtype = 18;
+    mm.metype = 5;
+    ASSERT_EQ_INT("v0nacp mt18 me5", compute_v0_nacp(&mm), 11);
+
+    // default -> -1
+    mm.msgtype = 17;
+    mm.metype = 99;
+    ASSERT_EQ_INT("v0nacp default", compute_v0_nacp(&mm), -1);
+
+    fprintf(stderr, "testComputeV0Nacp: done\n\n");
+}
+
+// ---- testComputeV0Sil ----
+
+static void testComputeV0Sil(void) {
+    fprintf(stderr, "=== testComputeV0Sil ===\n");
+
+    struct modesMessage mm;
+
+    // msgtype != 17/18 -> -1
+    memset(&mm, 0, sizeof(mm));
+    mm.msgtype = 11;
+    mm.metype = 5;
+    ASSERT_EQ_INT("v0sil wrong msgtype", compute_v0_sil(&mm), -1);
+
+    // msgtype=17, metype=0 -> 0
+    memset(&mm, 0, sizeof(mm));
+    mm.msgtype = 17;
+    mm.metype = 0;
+    ASSERT_EQ_INT("v0sil me0", compute_v0_sil(&mm), 0);
+
+    // metype=5 -> 2
+    mm.metype = 5;
+    ASSERT_EQ_INT("v0sil me5", compute_v0_sil(&mm), 2);
+
+    // metype=17 -> 2
+    mm.metype = 17;
+    ASSERT_EQ_INT("v0sil me17", compute_v0_sil(&mm), 2);
+
+    // metype=18 -> 0
+    mm.metype = 18;
+    ASSERT_EQ_INT("v0sil me18", compute_v0_sil(&mm), 0);
+
+    // metype=20 -> 2
+    mm.metype = 20;
+    ASSERT_EQ_INT("v0sil me20", compute_v0_sil(&mm), 2);
+
+    // metype=22 -> 0
+    mm.metype = 22;
+    ASSERT_EQ_INT("v0sil me22", compute_v0_sil(&mm), 0);
+
+    // default -> -1
+    mm.metype = 99;
+    ASSERT_EQ_INT("v0sil default", compute_v0_sil(&mm), -1);
+
+    fprintf(stderr, "testComputeV0Sil: done\n\n");
+}
+
+// ---- testDuplicateCheck ----
+
+static void testDuplicateCheck(void) {
+    fprintf(stderr, "=== testDuplicateCheck ===\n");
+
+    int64_t now = 1700000000000LL;
+
+    // Case 1: Old position (>2s) -> returns 0
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        a.seen_pos = now - 3 * SECONDS;
+        a.lat = 1.0; a.lon = 1.0;
+        ASSERT_EQ_INT("dup old pos", duplicate_check(now, &a, 1.0, 1.0, &mm), 0);
+    }
+
+    // Case 2: Current pos matches within 2s -> returns 1
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        a.seen_pos = now;
+        a.lat = 1.0; a.lon = 1.0;
+        int ret = duplicate_check(now, &a, 1.0, 1.0, &mm);
+        ASSERT_EQ_INT("dup match ret", ret, 1);
+        ASSERT_EQ_INT("dup match flag", mm.duplicate, 1);
+    }
+
+    // Case 3: Prev pos matches within 2s -> returns 1
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        a.seen_pos = now;        // current is recent
+        a.lat = 2.0; a.lon = 2.0;  // current doesn't match
+        a.prev_lat = 1.0; a.prev_lon = 1.0;
+        a.prev_pos_time = now;
+        int ret = duplicate_check(now, &a, 1.0, 1.0, &mm);
+        ASSERT_EQ_INT("dup prev ret", ret, 1);
+        ASSERT_EQ_INT("dup prev flag", mm.duplicate, 1);
+    }
+
+    // Case 4: Already checked (duplicate_checked=1, duplicate=0) -> returns 0
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        mm.duplicate_checked = 1;
+        mm.duplicate = 0;
+        a.seen_pos = now;
+        a.lat = 1.0; a.lon = 1.0;
+        ASSERT_EQ_INT("dup checked", duplicate_check(now, &a, 1.0, 1.0, &mm), 0);
+    }
+
+    fprintf(stderr, "testDuplicateCheck: done\n\n");
+}
+
+// ---- testUat2esntDuplicate ----
+
+static void testUat2esntDuplicate(void) {
+    fprintf(stderr, "=== testUat2esntDuplicate ===\n");
+
+    int64_t now = 1700000000000LL;
+
+    // Case 1: All conditions met -> 1
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        mm.cpr_valid = 1;
+        mm.cpr_odd = 1;
+        mm.msgtype = 18;
+        mm.timestamp = MAGIC_UAT_TIMESTAMP;
+        a.seenPosReliable = now - 2000; // 2s ago, < 2500ms
+        ASSERT_EQ_INT("uat dup all", uat2esnt_duplicate(now, &a, &mm), 1);
+    }
+
+    // Case 2: Missing cpr_odd -> 0
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        mm.cpr_valid = 1;
+        mm.cpr_odd = 0; // missing
+        mm.msgtype = 18;
+        mm.timestamp = MAGIC_UAT_TIMESTAMP;
+        a.seenPosReliable = now - 2000;
+        ASSERT_EQ_INT("uat dup no odd", uat2esnt_duplicate(now, &a, &mm), 0);
+    }
+
+    // Case 3: Wrong msgtype -> 0
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        mm.cpr_valid = 1;
+        mm.cpr_odd = 1;
+        mm.msgtype = 17; // wrong
+        mm.timestamp = MAGIC_UAT_TIMESTAMP;
+        a.seenPosReliable = now - 2000;
+        ASSERT_EQ_INT("uat dup wrong mt", uat2esnt_duplicate(now, &a, &mm), 0);
+    }
+
+    fprintf(stderr, "testUat2esntDuplicate: done\n\n");
+}
+
+// ---- testAcceptData ----
+
+static void testAcceptData(void) {
+    fprintf(stderr, "=== testAcceptData ===\n");
+
+    // Disable receiver ID checking
+    Modes.netReceiverId = 0;
+
+    // Case 1: Rejected (SOURCE_INVALID)
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        data_validity d;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        mm.sysTimestamp = 1000000;
+        ASSERT_EQ_INT("accept rejected", accept_data(&d, SOURCE_INVALID, &mm, &a, 0), 0);
+    }
+
+    // Case 2: Accepted, sets fields
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        data_validity d;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_INVALID;
+        mm.sysTimestamp = 1000000;
+        Modes.net_output_beast_reduce_interval = 1000;
+        Modes.doubleBeastReduceIntervalUntil = 0;
+        int ret = accept_data(&d, SOURCE_ADSB, &mm, &a, REDUCE_OFTEN);
+        ASSERT_EQ_INT("accept ok ret", ret, 1);
+        ASSERT_EQ_INT("accept ok source", d.source, SOURCE_ADSB);
+        ASSERT_EQ_I64("accept ok updated", d.updated, 1000000);
+        ASSERT_EQ_INT("accept ok stale", d.stale, 0);
+    }
+
+    // Case 3: SOURCE_PRIO -> d.source becomes SOURCE_ADSB
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        data_validity d;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_INVALID;
+        mm.sysTimestamp = 2000000;
+        Modes.net_output_beast_reduce_interval = 1000;
+        Modes.doubleBeastReduceIntervalUntil = 0;
+        accept_data(&d, SOURCE_PRIO, &mm, &a, REDUCE_OFTEN);
+        ASSERT_EQ_INT("accept prio src", d.source, SOURCE_ADSB);
+    }
+
+    // Case 4: Sets next_reduce_forward (REDUCE_OFTEN: interval * 3/4 = 750)
+    {
+        struct aircraft a;
+        struct modesMessage mm;
+        data_validity d;
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_INVALID;
+        mm.sysTimestamp = 3000000;
+        Modes.net_output_beast_reduce_interval = 1000;
+        Modes.doubleBeastReduceIntervalUntil = 0;
+        accept_data(&d, SOURCE_ADSB, &mm, &a, REDUCE_OFTEN);
+        ASSERT_TRUE("accept reduce_fwd", d.next_reduce_forward > 0);
+        // REDUCE_OFTEN: reduceInterval = 1000 * 3/4 = 750
+        ASSERT_EQ_I64("accept reduce_val", d.next_reduce_forward, 3000000 + 750);
+    }
+
+    // Cleanup
+    Modes.net_output_beast_reduce_interval = 0;
+
+    fprintf(stderr, "testAcceptData: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -853,6 +1140,11 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testCombineValidity();
     testCompareValidity();
     testCprGlobalAirborneMaxElapsed();
+    testComputeV0Nacp();
+    testComputeV0Sil();
+    testDuplicateCheck();
+    testUat2esntDuplicate();
+    testAcceptData();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

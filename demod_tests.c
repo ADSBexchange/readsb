@@ -367,6 +367,30 @@ static void testSliceByteDetection(void) {
     fprintf(stderr, "testSliceByteDetection: done\n\n");
 }
 
+// ---- testYscale ----
+// yscale is behind #ifdef MODEAC_DEBUG in demod_2400.c; define locally for testing
+static int yscale(unsigned signal) {
+    return (int) (299 - 299.0 * signal / 65536.0);
+}
+
+static void testYscale(void) {
+    fprintf(stderr, "=== testYscale ===\n");
+
+    // signal=0 -> 299
+    ASSERT_INT_EQ("yscale 0", yscale(0), 299);
+
+    // signal=65535 -> (int)(299 - 299.0*65535/65536.0) = (int)(299 - 298.995...) = (int)(0.00456...) = 0
+    ASSERT_INT_EQ("yscale 65535", yscale(65535), 0);
+
+    // signal=32768 -> (int)(299 - 299.0*32768/65536.0) = (int)(299 - 149.5) = (int)(149.5) = 149
+    ASSERT_INT_EQ("yscale 32768", yscale(32768), 149);
+
+    // signal=1 -> (int)(299 - 299.0/65536.0) = (int)(299 - 0.00456...) = (int)(298.995...) = 298
+    ASSERT_INT_EQ("yscale 1", yscale(1), 298);
+
+    fprintf(stderr, "testYscale: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -378,6 +402,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testInitBitsetsWithDamage();
     testSliceBytePhaseAdvance();
     testSliceByteDetection();
+    testYscale();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

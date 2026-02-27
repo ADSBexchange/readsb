@@ -657,6 +657,137 @@ static void testParseDoubles(void) {
     fprintf(stderr, "testParseDoubles: done\n\n");
 }
 
+// ---- testAntiSpam ----
+
+static void testAntiSpam(void) {
+    fprintf(stderr, "=== testAntiSpam ===\n");
+
+    // mstime() returns 1700000000000LL in our stub
+
+    // Case 1: First call (nextPrint=0) -> returns 1, updates nextPrint
+    {
+        int64_t nextPrint = 0;
+        int ret = antiSpam(&nextPrint, 5000);
+        ASSERT_INT_EQ("spam first", ret, 1);
+        ASSERT_TRUE("spam first next", nextPrint == 1700000000000LL + 5000);
+    }
+
+    // Case 2: Within interval -> returns 0
+    {
+        int64_t nextPrint = 1700000000000LL + 5000; // set to future
+        int ret = antiSpam(&nextPrint, 5000);
+        ASSERT_INT_EQ("spam within", ret, 0);
+    }
+
+    // Case 3: Expired (nextPrint in the past) -> returns 1
+    {
+        int64_t nextPrint = 1700000000000LL - 1; // just expired
+        int ret = antiSpam(&nextPrint, 5000);
+        ASSERT_INT_EQ("spam expired", ret, 1);
+        ASSERT_TRUE("spam expired next", nextPrint == 1700000000000LL + 5000);
+    }
+
+    fprintf(stderr, "testAntiSpam: done\n\n");
+}
+
+// ---- testFilterWithPos ----
+
+static void testFilterWithPos(void) {
+    fprintf(stderr, "=== testFilterWithPos ===\n");
+
+    // Case 1: Mixed (valid, invalid, valid) -> count=2
+    {
+        struct apiEntry haystack[3];
+        memset(haystack, 0, sizeof(haystack));
+        haystack[0].bin.position_valid = 1;
+        haystack[1].bin.position_valid = 0;
+        haystack[2].bin.position_valid = 1;
+
+        struct apiEntry matches[3];
+        size_t alloc = 0;
+        int count = filterWithPos(haystack, 3, matches, &alloc);
+        ASSERT_INT_EQ("fwp mixed", count, 2);
+    }
+
+    // Case 2: None valid -> 0
+    {
+        struct apiEntry haystack[2];
+        memset(haystack, 0, sizeof(haystack));
+        haystack[0].bin.position_valid = 0;
+        haystack[1].bin.position_valid = 0;
+
+        struct apiEntry matches[2];
+        size_t alloc = 0;
+        int count = filterWithPos(haystack, 2, matches, &alloc);
+        ASSERT_INT_EQ("fwp none", count, 0);
+    }
+
+    // Case 3: All valid -> 2
+    {
+        struct apiEntry haystack[2];
+        memset(haystack, 0, sizeof(haystack));
+        haystack[0].bin.position_valid = 1;
+        haystack[1].bin.position_valid = 1;
+
+        struct apiEntry matches[2];
+        size_t alloc = 0;
+        int count = filterWithPos(haystack, 2, matches, &alloc);
+        ASSERT_INT_EQ("fwp all", count, 2);
+    }
+
+    fprintf(stderr, "testFilterWithPos: done\n\n");
+}
+
+// ---- testFilterTypeList ----
+
+static void testFilterTypeList(void) {
+    fprintf(stderr, "=== testFilterTypeList ===\n");
+
+    // Case 1: Exact match
+    {
+        struct apiEntry haystack[2];
+        memset(haystack, 0, sizeof(haystack));
+        memcpy(haystack[0].bin.typeCode, "B738", 4);
+        memcpy(haystack[1].bin.typeCode, "A320", 4);
+
+        struct apiEntry matches[2];
+        size_t alloc = 0;
+        char typeList[4] = {'B', '7', '3', '8'};
+        int count = filterTypeList(haystack, 2, typeList, 1, matches, &alloc);
+        ASSERT_INT_EQ("ftl exact", count, 1);
+    }
+
+    // Case 2: Lowercase input -> uppercased, matches
+    {
+        struct apiEntry haystack[2];
+        memset(haystack, 0, sizeof(haystack));
+        memcpy(haystack[0].bin.typeCode, "B738", 4);
+        memcpy(haystack[1].bin.typeCode, "A320", 4);
+
+        struct apiEntry matches[2];
+        size_t alloc = 0;
+        char typeList[4] = {'b', '7', '3', '8'};
+        int count = filterTypeList(haystack, 2, typeList, 1, matches, &alloc);
+        ASSERT_INT_EQ("ftl lower", count, 1);
+    }
+
+    // Case 3: No match
+    {
+        struct apiEntry haystack[2];
+        memset(haystack, 0, sizeof(haystack));
+        memcpy(haystack[0].bin.typeCode, "B738", 4);
+        memcpy(haystack[1].bin.typeCode, "A320", 4);
+
+        struct apiEntry matches[2];
+        size_t alloc = 0;
+        char typeList[4] = {'C', '1', '7', '2'};
+        int count = filterTypeList(haystack, 2, typeList, 1, matches, &alloc);
+        ASSERT_INT_EQ("ftl nomatch", count, 0);
+    }
+
+    fprintf(stderr, "testFilterTypeList: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -672,6 +803,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testFindInBox();
     testFindInCircle();
     testParseDoubles();
+    testAntiSpam();
+    testFilterWithPos();
+    testFilterTypeList();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

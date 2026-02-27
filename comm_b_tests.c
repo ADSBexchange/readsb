@@ -679,6 +679,68 @@ static void testDecodeBDS40EdgeCases(void) {
     fprintf(stderr, "testDecodeBDS40EdgeCases: done\n\n");
 }
 
+// ---- testDecodeBDS44 ----
+
+static void testDecodeBDS44(void) {
+    fprintf(stderr, "=== testDecodeBDS44 ===\n");
+
+    // Case 1: Valid with wind, temp 20°C
+    // source=1 (bits 1-4), wind_valid=1 (bit 5), wind_speed=200 (bits 6-14),
+    // wind_direction=128 (bits 15-23), temp_sign=0 (bit 24), temp_raw=80 (bits 25-34) -> 20°C
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbits_mb(mm.MB, 1, 4, 1);    // source=1 (valid: 0-6)
+        setbit(mm.MB, 5);              // wind_valid=1
+        setbits_mb(mm.MB, 6, 14, 200);  // wind_speed=200
+        setbits_mb(mm.MB, 15, 23, 128); // wind_direction=128
+        // bit 24 = 0 (temp_sign positive)
+        setbits_mb(mm.MB, 25, 34, 80);  // temp_raw=80 -> 80*0.25=20°C
+        // pressure_valid=0, turbulence_valid=0, humidity_valid=0
+
+        int score = decodeBDS44(&mm, false);
+        ASSERT_TRUE("BDS44 wind score>0", score > 0);
+
+        // Store and verify
+        struct modesMessage mm2 = make_mm();
+        memcpy(mm2.MB, mm.MB, 7);
+        decodeBDS44(&mm2, true);
+        ASSERT_EQ_INT("BDS44 wind_valid", mm2.wind_valid, 1);
+        ASSERT_FLOAT_NEAR("BDS44 oat", mm2.oat, 20.0f, 0.5f);
+        ASSERT_EQ_INT("BDS44 commb_format", mm2.commb_format, COMMB_METEOROLOGICAL_ROUTINE);
+    }
+
+    // Case 2: Invalid source (>6)
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbits_mb(mm.MB, 1, 4, 7);  // source=7 (invalid: >6)
+        int score = decodeBDS44(&mm, false);
+        ASSERT_EQ_INT("BDS44 bad source", score, 0);
+    }
+
+    // Case 3: Temp only (no wind), 25°C
+    {
+        struct modesMessage mm = make_mm();
+        memset(mm.MB, 0, 7);
+        setbits_mb(mm.MB, 1, 4, 1);     // source=1
+        // wind_valid=0 (bit 5 not set)
+        // bit 24 = 0 (temp_sign positive)
+        setbits_mb(mm.MB, 25, 34, 100);  // temp_raw=100 -> 100*0.25=25°C
+
+        int score = decodeBDS44(&mm, false);
+        ASSERT_TRUE("BDS44 temp score>0", score > 0);
+
+        struct modesMessage mm2 = make_mm();
+        memcpy(mm2.MB, mm.MB, 7);
+        decodeBDS44(&mm2, true);
+        ASSERT_FLOAT_NEAR("BDS44 temp oat", mm2.oat, 25.0f, 0.5f);
+        ASSERT_EQ_INT("BDS44 temp wind_valid", mm2.wind_valid, 0);
+    }
+
+    fprintf(stderr, "testDecodeBDS44: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -693,6 +755,7 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testDecodeBDS17();
     testDecodeBDS30();
     testDecodeBDS40EdgeCases();
+    testDecodeBDS44();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

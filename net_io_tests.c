@@ -484,6 +484,73 @@ static void testCharToAis(void) {
     fprintf(stderr, "testCharToAis: done\n\n");
 }
 
+// ---- testBam32ToDouble ----
+
+static void testBam32ToDouble(void) {
+    fprintf(stderr, "=== testBam32ToDouble ===\n");
+
+    // Zero -> 0.0
+    {
+        uint32_t bam = 0;
+        double result = bam32ToDouble(bam);
+        ASSERT_FLOAT_NEAR("bam zero", result, 0.0, 0.001);
+    }
+
+    // +90° BAM value -> ~90.0
+    // bam32ToDouble does: (double)((int32_t)ntohl(bam) * 8.38190317153931E-08)
+    // For 90°: ntohl(bam) should be (int32_t)(90.0 / 8.38190317153931E-08)
+    // = 90.0 / 8.38190317153931E-08 = 1073741824 = 0x40000000
+    // bam input needs to be htonl(0x40000000)
+    {
+        uint32_t bam = htonl((int32_t)(90.0 / 8.38190317153931E-08));
+        double result = bam32ToDouble(bam);
+        ASSERT_FLOAT_NEAR("bam +90", result, 90.0, 0.001);
+    }
+
+    // -90° BAM value -> ~-90.0
+    {
+        uint32_t bam = htonl((int32_t)(-90.0 / 8.38190317153931E-08));
+        double result = bam32ToDouble(bam);
+        ASSERT_FLOAT_NEAR("bam -90", result, -90.0, 0.001);
+    }
+
+    fprintf(stderr, "testBam32ToDouble: done\n\n");
+}
+
+// ---- testHexDumpString ----
+
+static void testHexDumpString(void) {
+    fprintf(stderr, "=== testHexDumpString ===\n");
+
+    // Simple ASCII "Hi" -> "48 69 |Hi|"
+    {
+        char buf[256];
+        memset(buf, 0, sizeof(buf));
+        const char *result = hexDumpString("Hi", 2, buf, sizeof(buf));
+        ASSERT_STR_EQ("hexdump Hi", result, "48 69 |Hi|");
+    }
+
+    // Non-printable bytes (0x01, 0x7F) -> dots in ASCII sidebar
+    {
+        char buf[256];
+        memset(buf, 0, sizeof(buf));
+        char input[] = {0x01, 0x7F};
+        const char *result = hexDumpString(input, 2, buf, sizeof(buf));
+        ASSERT_STR_EQ("hexdump nonprint", result, "01 7f |..|");
+    }
+
+    // Buffer too small (buflen such that max <= 0) -> empty string
+    {
+        char buf[4];
+        memset(buf, 'X', sizeof(buf));
+        const char *result = hexDumpString("Hi", 2, buf, 4);
+        // max = 4/4 - 4 = -3, which is <= 0, so buf[0] = 0
+        ASSERT_STR_EQ("hexdump small", result, "");
+    }
+
+    fprintf(stderr, "testHexDumpString: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -495,6 +562,8 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testReadPing();
     testReadPingEscaped();
     testCharToAis();
+    testBam32ToDouble();
+    testHexDumpString();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

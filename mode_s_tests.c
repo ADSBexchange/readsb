@@ -1354,6 +1354,278 @@ static void testEsTypeNameAndHasSubtype(void) {
     fprintf(stderr, "testEsTypeNameAndHasSubtype: done\n\n");
 }
 
+// ---- testDecodeESTargetStatus ----
+
+static void testDecodeESTargetStatus(void) {
+    fprintf(stderr, "=== testDecodeESTargetStatus ===\n");
+
+    // V1 case 1: MCP alt, vertical "acquiring"
+    // mesub=0 (bits 6-7=0), bit 11=0, bits 8-9=1 (MCP), bits 14-15=1, bits 16-25=360 (alt=35000)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 29;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 0);    // mesub=0
+        // bit 11 defaults to 0
+        setbits_me(me, 8, 9, 1);    // vertical source = MCP
+        setbits_me(me, 14, 15, 1);  // vertical mode = acquiring
+        setbits_me(me, 16, 25, 360); // altitude = -1000 + 100*360 = 35000
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTargetStatus(&mm, 0);
+
+        ASSERT_EQ_INT("tsV1 mcp altsrc", mm.nav.altitude_source, NAV_ALT_MCP);
+        ASSERT_TRUE("tsV1 mcp autopilot", (mm.nav.modes & NAV_MODE_AUTOPILOT) != 0);
+        ASSERT_EQ_INT("tsV1 mcp_valid", mm.nav.mcp_altitude_valid, 1);
+        ASSERT_EQ_INT("tsV1 mcp_alt", mm.nav.mcp_altitude, 35000);
+    }
+
+    // V1 case 2: FMS alt, vertical "maintaining"
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 29;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 0);    // mesub=0
+        setbits_me(me, 8, 9, 3);    // vertical source = FMS
+        setbits_me(me, 14, 15, 2);  // vertical mode = maintaining
+        setbits_me(me, 16, 25, 200); // altitude = -1000 + 100*200 = 19000
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTargetStatus(&mm, 0);
+
+        ASSERT_TRUE("tsV1 fms vnav", (mm.nav.modes & NAV_MODE_VNAV) != 0);
+        ASSERT_EQ_INT("tsV1 fms_valid", mm.nav.fms_altitude_valid, 1);
+        ASSERT_EQ_INT("tsV1 fms_alt", mm.nav.fms_altitude, 19000);
+    }
+
+    // V1 case 3: heading + TCAS + emergency
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 29;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 0);     // mesub=0
+        setbits_me(me, 8, 9, 1);     // MCP source
+        setbits_me(me, 26, 27, 1);   // h_source=1 (heading valid)
+        setbits_me(me, 28, 36, 180); // heading raw = 180
+        setbits_me(me, 37, 37, 0);   // heading type = magnetic
+        setbits_me(me, 52, 53, 2);   // TCAS active
+        setbits_me(me, 54, 56, 1);   // emergency = 1
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTargetStatus(&mm, 0);
+
+        ASSERT_EQ_INT("tsV1 hdg_valid", mm.nav.heading_valid, 1);
+        ASSERT_EQ_UINT("tsV1 hdg", mm.nav.heading, 180);
+        ASSERT_TRUE("tsV1 tcas", (mm.nav.modes & NAV_MODE_TCAS) != 0);
+        ASSERT_EQ_INT("tsV1 emer_valid", mm.emergency_valid, 1);
+        ASSERT_EQ_INT("tsV1 emergency", mm.emergency, 1);
+    }
+
+    // V2 case 4: FMS alt + QNH + heading
+    // mesub=1, bit 9=1 (is_fms), bits 10-20=1095 (34880ft), bits 21-29=126 (qnh=900.0), bit 30=1, bits 31-39=128 (90°)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 29;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 1);      // mesub=1 (V2)
+        setbit_me(me, 9);             // is_fms=1
+        setbits_me(me, 10, 20, 1095); // alt_bits=1095 -> (1095-1)*32=35008
+        setbits_me(me, 21, 29, 126);  // baro_bits=126 -> 800+(126-1)*0.8=900.0
+        setbit_me(me, 30);            // heading valid
+        setbits_me(me, 31, 39, 128);  // heading = 128*180.0/256.0 = 90.0
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTargetStatus(&mm, 0);
+
+        ASSERT_EQ_INT("tsV2 fms_valid", mm.nav.fms_altitude_valid, 1);
+        ASSERT_EQ_INT("tsV2 fms_alt", mm.nav.fms_altitude, 35008);
+        ASSERT_EQ_INT("tsV2 qnh_valid", mm.nav.qnh_valid, 1);
+        ASSERT_FLOAT_NEAR("tsV2 qnh", mm.nav.qnh, 900.0f, 0.1f);
+        ASSERT_EQ_INT("tsV2 hdg_valid", mm.nav.heading_valid, 1);
+        ASSERT_FLOAT_NEAR("tsV2 hdg", mm.nav.heading, 90.0f, 0.1f);
+    }
+
+    // V2 case 5: mode bits
+    // mesub=1, bit 47=1 (mode valid), bits 48,49,53 set
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 29;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 7, 1);  // mesub=1 (V2)
+        setbit_me(me, 47);        // mode bits valid
+        setbit_me(me, 48);        // AUTOPILOT
+        setbit_me(me, 49);        // VNAV
+        setbit_me(me, 53);        // TCAS
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESTargetStatus(&mm, 0);
+
+        ASSERT_EQ_INT("tsV2 modes_valid", mm.nav.modes_valid, 1);
+        ASSERT_TRUE("tsV2 autopilot", (mm.nav.modes & NAV_MODE_AUTOPILOT) != 0);
+        ASSERT_TRUE("tsV2 vnav", (mm.nav.modes & NAV_MODE_VNAV) != 0);
+        ASSERT_TRUE("tsV2 tcas", (mm.nav.modes & NAV_MODE_TCAS) != 0);
+    }
+
+    fprintf(stderr, "testDecodeESTargetStatus: done\n\n");
+}
+
+// ---- testDecodeESOperationalStatus ----
+
+static void testDecodeESOperationalStatus(void) {
+    fprintf(stderr, "=== testDecodeESOperationalStatus ===\n");
+
+    // V0 airborne (mesub=0)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 31;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0);    // mesub=0 (airborne)
+        setbits_me(me, 41, 43, 0);  // version=0
+        setbits_me(me, 9, 10, 0);   // required for V0 airborne
+        // bit 12 defaults to 0 -> cc_acas = !0 = 1
+        // bit 13 defaults to 0 -> cc_cdti = 0
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESOperationalStatus(&mm, 0);
+
+        ASSERT_EQ_INT("opV0 valid", mm.opstatus.valid, 1);
+        ASSERT_EQ_INT("opV0 version", mm.opstatus.version, 0);
+        ASSERT_EQ_INT("opV0 cc_acas", mm.opstatus.cc_acas, 1);
+        ASSERT_EQ_INT("opV0 cc_cdti", mm.opstatus.cc_cdti, 0);
+    }
+
+    // V1 airborne (mesub=0)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 31;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0);    // mesub=0 (airborne)
+        setbits_me(me, 41, 43, 1);  // version=1
+        setbits_me(me, 9, 10, 0);   // required
+        setbits_me(me, 13, 14, 0);  // required for airborne
+        setbit_me(me, 44);          // nic_a=1
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESOperationalStatus(&mm, 0);
+
+        ASSERT_EQ_INT("opV1 valid", mm.opstatus.valid, 1);
+        ASSERT_EQ_INT("opV1 version", mm.opstatus.version, 1);
+        ASSERT_EQ_INT("opV1 nic_a_valid", mm.accuracy.nic_a_valid, 1);
+        ASSERT_EQ_INT("opV1 nic_a", mm.accuracy.nic_a, 1);
+    }
+
+    // V2 airborne (mesub=0)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 31;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 0);    // mesub=0 (airborne)
+        setbits_me(me, 41, 43, 2);  // version=2
+        setbits_me(me, 9, 10, 0);   // required
+        setbit_me(me, 55);          // sil_type = SIL_PER_SAMPLE
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESOperationalStatus(&mm, 0);
+
+        ASSERT_EQ_INT("opV2 valid", mm.opstatus.valid, 1);
+        ASSERT_EQ_INT("opV2 version", mm.opstatus.version, 2);
+        ASSERT_EQ_INT("opV2 sil_type", mm.accuracy.sil_type, SIL_PER_SAMPLE);
+        ASSERT_EQ_INT("opV2 gva_valid", mm.accuracy.gva_valid, 1);
+    }
+
+    // V2 surface (mesub=1)
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.metype = 31;
+        unsigned char me[7];
+        memset(me, 0, sizeof(me));
+        setbits_me(me, 6, 8, 1);    // mesub=1 (surface)
+        setbits_me(me, 41, 43, 2);  // version=2
+        setbits_me(me, 9, 10, 0);   // required
+        setbit_me(me, 20);          // nic_c=1
+        memcpy(mm.ME, me, sizeof(me));
+
+        decodeESOperationalStatus(&mm, 0);
+
+        ASSERT_EQ_INT("opV2s nic_c_valid", mm.accuracy.nic_c_valid, 1);
+        ASSERT_EQ_INT("opV2s nic_c", mm.accuracy.nic_c, 1);
+        // bit 53 defaults to 0, hrd defaults to HEADING_TRUE (bit 54=0)
+        // tah = getbit(53) ? hrd : HEADING_GROUND_TRACK = HEADING_GROUND_TRACK
+        ASSERT_EQ_INT("opV2s tah", mm.opstatus.tah, HEADING_GROUND_TRACK);
+    }
+
+    fprintf(stderr, "testDecodeESOperationalStatus: done\n\n");
+}
+
+// ---- testSetIMF ----
+
+static void testSetIMF(void) {
+    fprintf(stderr, "=== testSetIMF ===\n");
+
+    // ADDR_ADSB_ICAO -> ADDR_ADSB_OTHER
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.addr = 0xABCDEF;
+        mm.addrtype = ADDR_ADSB_ICAO;
+        setIMF(&mm);
+        ASSERT_TRUE("imf adsb addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_EQ_INT("imf adsb type", mm.addrtype, ADDR_ADSB_OTHER);
+    }
+
+    // ADDR_TISB_ICAO -> ADDR_TISB_TRACKFILE
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.addr = 0x123456;
+        mm.addrtype = ADDR_TISB_ICAO;
+        setIMF(&mm);
+        ASSERT_TRUE("imf tisb addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_EQ_INT("imf tisb type", mm.addrtype, ADDR_TISB_TRACKFILE);
+    }
+
+    // ADDR_ADSR_ICAO -> ADDR_ADSR_OTHER
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.addr = 0x789ABC;
+        mm.addrtype = ADDR_ADSR_ICAO;
+        setIMF(&mm);
+        ASSERT_TRUE("imf adsr addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_EQ_INT("imf adsr type", mm.addrtype, ADDR_ADSR_OTHER);
+    }
+
+    // ADDR_ADSB_OTHER -> unchanged
+    {
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        mm.addr = 0xDEF012;
+        mm.addrtype = ADDR_ADSB_OTHER;
+        setIMF(&mm);
+        ASSERT_TRUE("imf other addr", (mm.addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_EQ_INT("imf other type", mm.addrtype, ADDR_ADSB_OTHER);
+    }
+
+    fprintf(stderr, "testSetIMF: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -1378,6 +1650,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testStringHelpers();
     testCommBFormatAndNavModesStrings();
     testEsTypeNameAndHasSubtype();
+    testDecodeESTargetStatus();
+    testDecodeESOperationalStatus();
+    testSetIMF();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
