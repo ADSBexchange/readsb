@@ -7,7 +7,7 @@ Last updated: 2026-02-26
 | Category | Count |
 |----------|-------|
 | Unit test binaries | 22 |
-| Unit test functions | ~200 |
+| Unit test functions | ~210 |
 | Integration test files | 13 |
 | Integration test functions | 87 |
 
@@ -41,7 +41,7 @@ Last updated: 2026-02-26
 | `geomag_tests.c` | `geomag.c` | link .o | 6 | 0 | -lm |
 | `track_tests.c` | `track.c` | #include | 19 | 8 | -lm -lpthread |
 | `stats_tests.c` | `stats.c` | #include | 7 | 5 | -lm |
-| `net_io_tests.c` | `net_io.c` | #include | 10 | 12 | -lm -lzstd -lz -lpthread -lrt |
+| `net_io_tests.c` | `net_io.c` | #include | 20 | 12 | -lm -lzstd -lz -lpthread -lrt |
 | `json_out_tests.c` | `json_out.c` | #include | 8 | 14 | -lm -lz |
 | `api_tests.c` | `api.c` | #include | 15 | 10 | -lm -lzstd -lz -lpthread -lrt |
 | `aircraft_tests.c` | `aircraft.c` | #include | 10 | 8 | -lm -lz |

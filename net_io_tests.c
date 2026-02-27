@@ -140,6 +140,22 @@ void uat2esnt_convert_message(char __attribute__((unused)) *p,
 
 static int failures = 0;
 
+// messageBuffer infrastructure for protocol parser tests
+static struct modesMessage test_mm_storage[16];
+static struct messageBuffer test_mb;
+
+static void resetMessageBuffer(void) {
+    memset(test_mm_storage, 0, sizeof(test_mm_storage));
+    test_mb.msg = test_mm_storage;
+    test_mb.len = 0;
+    test_mb.alloc = 16;
+    test_mb.id = 0;
+    test_mb.activeClient = NULL;
+}
+
+static struct net_service test_service = { .descr = "test" };
+static struct client test_client;
+
 #define ASSERT_TRUE(tag, cond) do { \
     if (!(cond)) { \
         fprintf(stderr, "%s: FAIL\n", tag); \
@@ -517,6 +533,25 @@ static void testBam32ToDouble(void) {
     fprintf(stderr, "testBam32ToDouble: done\n\n");
 }
 
+#define ASSERT_EQ_U64(tag, got, expected) do { \
+    uint64_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %llu (0x%llx), expected %llu (0x%llx)\n", tag, \
+                (unsigned long long)_g, (unsigned long long)_g, \
+                (unsigned long long)_e, (unsigned long long)_e); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_EQ_I64(tag, got, expected) do { \
+    int64_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %lld, expected %lld\n", tag, \
+                (long long)_g, (long long)_e); \
+        failures++; \
+    } \
+} while(0)
+
 // ---- testHexDumpString ----
 
 static void testHexDumpString(void) {
@@ -551,6 +586,552 @@ static void testHexDumpString(void) {
     fprintf(stderr, "testHexDumpString: done\n\n");
 }
 
+// ---- testReadFspec ----
+
+static void testReadFspec(void) {
+    fprintf(stderr, "=== testReadFspec ===\n");
+
+    // Single byte, no continuation (bit 0 = 0)
+    {
+        char data[] = {(char)0x80};
+        char *p = data;
+        uint8_t *fspec = readFspec(&p);
+        ASSERT_EQ_UINT8("fspec single byte0", fspec[0], 0x80);
+        ASSERT_EQ_UINT8("fspec single byte1", fspec[1], 0);
+        ASSERT_INT_EQ("fspec single advance", (int)(p - data), 1);
+        free(fspec);
+    }
+
+    // Two bytes (byte0 bit0=1 → continuation, byte1 bit0=0 → stop)
+    {
+        char data[] = {(char)0x81, (char)0x40};
+        char *p = data;
+        uint8_t *fspec = readFspec(&p);
+        ASSERT_EQ_UINT8("fspec two byte0", fspec[0], 0x81);
+        ASSERT_EQ_UINT8("fspec two byte1", fspec[1], 0x40);
+        ASSERT_INT_EQ("fspec two advance", (int)(p - data), 2);
+        free(fspec);
+    }
+
+    // Three bytes (byte0 bit0=1, byte1 bit0=1, byte2 bit0=0)
+    {
+        char data[] = {(char)0x03, (char)0x05, (char)0x80};
+        char *p = data;
+        uint8_t *fspec = readFspec(&p);
+        ASSERT_EQ_UINT8("fspec three byte0", fspec[0], 0x03);
+        ASSERT_EQ_UINT8("fspec three byte1", fspec[1], 0x05);
+        ASSERT_EQ_UINT8("fspec three byte2", fspec[2], 0x80);
+        ASSERT_INT_EQ("fspec three advance", (int)(p - data), 3);
+        free(fspec);
+    }
+
+    fprintf(stderr, "testReadFspec: done\n\n");
+}
+
+// ---- testReadAsterixTime ----
+
+static void testReadAsterixTime(void) {
+    fprintf(stderr, "=== testReadAsterixTime ===\n");
+
+    // mstime() returns 1700000000000LL
+    // midnight = (1700000000000 / 86400000) * 86400000 = 1699920000000
+    // current offset = 1700000000000 - 1699920000000 = 80000000 ms
+    int64_t midnight = 1699920000000LL;
+
+    // Encode ~80000 seconds = 80000000 ms
+    // rawtime = mssm * 0.128 = 80000000 * 0.128 = 10240000
+    // 10240000 = 0x9C4000 → bytes {0x9C, 0x40, 0x00}
+    {
+        char data[] = {(char)0x9C, (char)0x40, (char)0x00};
+        char *p = data;
+        uint64_t result = readAsterixTime(&p);
+        // mssm = 10240000 / 0.128 = 80000000
+        ASSERT_EQ_U64("asterix time current", result, (uint64_t)(midnight + 80000000));
+        ASSERT_INT_EQ("asterix time advance", (int)(p - data), 3);
+    }
+
+    // Midnight (zero)
+    {
+        char data[] = {0x00, 0x00, 0x00};
+        char *p = data;
+        uint64_t result = readAsterixTime(&p);
+        // rawtime=0, mssm=0, diff = midnight + 0 - mstime() = -80000000
+        // abs(-80000000) < 43200000? No, 80000000 > 43200000 → return midnight - 86400000 + 0
+        // That means previous day midnight
+        ASSERT_EQ_U64("asterix time zero", result, (uint64_t)(midnight - 86400000));
+    }
+
+    // Encode ~80001 seconds = 80001000 ms (slightly after current time)
+    // rawtime = 80001000 * 0.128 = 10240128 = 0x9C4080
+    {
+        char data[] = {(char)0x9C, (char)0x40, (char)0x80};
+        char *p = data;
+        uint64_t result = readAsterixTime(&p);
+        int rawtime = (0x9C << 16) + (0x40 << 8) + 0x80; // 10240128
+        int mssm = (int)(rawtime / .128);
+        ASSERT_EQ_U64("asterix time near", result, (uint64_t)(midnight + mssm));
+    }
+
+    fprintf(stderr, "testReadAsterixTime: done\n\n");
+}
+
+// ---- testReadAsterixHighPrecisionTime ----
+
+static void testReadAsterixHighPrecisionTime(void) {
+    fprintf(stderr, "=== testReadAsterixHighPrecisionTime ===\n");
+
+    // FSI=0, zero offset: timestamp 5500 → wholesecond=5000, result=5000
+    {
+        // FSI=0b00, offset=0 → byte0=0x00, bytes 1-3=0x00
+        char data[] = {0x00, 0x00, 0x00, 0x00};
+        char *p = data;
+        uint64_t ts = 5500;
+        readAsterixHighPrecisionTime(&ts, &p);
+        ASSERT_EQ_U64("hpt fsi0 zero", ts, 5000);
+        ASSERT_INT_EQ("hpt fsi0 advance", (int)(p - data), 4);
+    }
+
+    // FSI=1 (+1 to wholesecond), zero offset
+    // Code does: wholesecond += 1 (adds 1 unit, not 1 second)
+    // wholesecond=5000 → 5001, result=5001
+    {
+        char data[] = {0x40, 0x00, 0x00, 0x00};
+        char *p = data;
+        uint64_t ts = 5500;
+        readAsterixHighPrecisionTime(&ts, &p);
+        ASSERT_EQ_U64("hpt fsi1 zero", ts, 5001);
+    }
+
+    // FSI=2 (-1 from wholesecond), with non-zero offset
+    // wholesecond=5000 → 4999
+    // offset raw = 0x04000000 (2^26), offset = 2^26 * 2^-27 = 0.5
+    // result = 4999 + 0 = 4999 (offset 0.5 truncated in uint64_t addition)
+    {
+        char data[] = {(char)0x84, 0x00, 0x00, 0x00};
+        char *p = data;
+        uint64_t ts = 5500;
+        readAsterixHighPrecisionTime(&ts, &p);
+        ASSERT_EQ_U64("hpt fsi2 half", ts, 4999);
+    }
+
+    fprintf(stderr, "testReadAsterixHighPrecisionTime: done\n\n");
+}
+
+// ---- testGetNextPfUnstuffedByte ----
+
+static void testGetNextPfUnstuffedByte(void) {
+    fprintf(stderr, "=== testGetNextPfUnstuffedByte ===\n");
+
+    // Normal byte (no DLE)
+    {
+        char data[] = {0x42, 0x00};
+        char *p = data;
+        unsigned char result = getNextPfUnstuffedByte(&p);
+        ASSERT_EQ_UINT8("pf normal", result, 0x42);
+        ASSERT_INT_EQ("pf normal advance", (int)(p - data), 1);
+    }
+
+    // DLE-escaped byte: {0x10, 0x10} → returns 0x10, advances 2
+    {
+        char data[] = {0x10, 0x10, 0x00};
+        char *p = data;
+        unsigned char result = getNextPfUnstuffedByte(&p);
+        ASSERT_EQ_UINT8("pf dle esc", result, 0x10);
+        ASSERT_INT_EQ("pf dle advance", (int)(p - data), 2);
+    }
+
+    // DLE before normal byte: {0x10, 0x42} → returns 0x42, advances 2
+    {
+        char data[] = {0x10, 0x42, 0x00};
+        char *p = data;
+        unsigned char result = getNextPfUnstuffedByte(&p);
+        ASSERT_EQ_UINT8("pf dle normal", result, 0x42);
+        ASSERT_INT_EQ("pf dle normal advance", (int)(p - data), 2);
+    }
+
+    // Sequential calls: {0x41, 0x10, 0x43}
+    {
+        char data[] = {0x41, 0x10, 0x43, 0x00};
+        char *p = data;
+        unsigned char r1 = getNextPfUnstuffedByte(&p);
+        ASSERT_EQ_UINT8("pf seq first", r1, 0x41);
+        unsigned char r2 = getNextPfUnstuffedByte(&p);
+        ASSERT_EQ_UINT8("pf seq second", r2, 0x43);
+    }
+
+    fprintf(stderr, "testGetNextPfUnstuffedByte: done\n\n");
+}
+
+// ---- testDecodeSbsLine ----
+
+static void testDecodeSbsLine(void) {
+    fprintf(stderr, "=== testDecodeSbsLine ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // Valid MSG,3 with position and altitude
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char line[] = "MSG,3,1,1,4AC8B3,1,2019/12/10,19:10:46.320,2019/12/10,19:10:47.789,,36017,,,51.1001,10.1915,,,,,,";
+        int ret = decodeSbsLine(&test_client, line, 0, now, &test_mb);
+        ASSERT_INT_EQ("sbs msg3 ret", ret, 0);
+        struct modesMessage *mm = &test_mm_storage[0];
+        ASSERT_EQ_U32("sbs msg3 addr", mm->addr, 0x4AC8B3);
+        ASSERT_INT_EQ("sbs msg3 baro_alt", mm->baro_alt, 36017);
+        ASSERT_TRUE("sbs msg3 baro_valid", mm->baro_alt_valid == 1);
+        ASSERT_FLOAT_NEAR("sbs msg3 lat", mm->decoded_lat, 51.1001, 0.001);
+        ASSERT_FLOAT_NEAR("sbs msg3 lon", mm->decoded_lon, 10.1915, 0.001);
+        ASSERT_TRUE("sbs msg3 pos_valid", mm->sbs_pos_valid == 1);
+        ASSERT_TRUE("sbs msg3 sbs_in", mm->sbs_in == 1);
+    }
+
+    // Valid MSG,1 with callsign
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char line[] = "MSG,1,1,1,A12345,1,2019/12/10,19:10:46.320,2019/12/10,19:10:47.789,UAL123  ,,,,,,,,,,,";
+        decodeSbsLine(&test_client, line, 0, now, &test_mb);
+        struct modesMessage *mm = &test_mm_storage[0];
+        ASSERT_EQ_U32("sbs msg1 addr", mm->addr, 0xA12345);
+        ASSERT_TRUE("sbs msg1 call_valid", mm->callsign_valid == 1);
+        ASSERT_TRUE("sbs msg1 callsign", strncmp(mm->callsign, "UAL123", 6) == 0);
+    }
+
+    // Heartbeat (too short — line_len < 2)
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char line[] = "\n";
+        int ret = decodeSbsLine(&test_client, line, 0, now, &test_mb);
+        ASSERT_INT_EQ("sbs heartbeat ret", ret, 0);
+        // No message consumed
+        ASSERT_INT_EQ("sbs heartbeat mb_len", test_mb.len, 0);
+    }
+
+    // Invalid (missing fields) — too short
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char line[] = "MSG,3,1";
+        decodeSbsLine(&test_client, line, 0, now, &test_mb);
+        ASSERT_TRUE("sbs invalid stats", Modes.stats_current.remote_received_basestation_invalid > 0);
+    }
+
+    // UAV with $ prefix
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        Modes.enable_uav = 1;
+        char line[] = "MSG,3,1,1,$000001,1,2019/12/10,19:10:46.320,2019/12/10,19:10:47.789,,1000,,,40.0,-74.0,,,,,,";
+        decodeSbsLine(&test_client, line, 0, now, &test_mb);
+        struct modesMessage *mm = &test_mm_storage[0];
+        ASSERT_TRUE("sbs uav non_icao", (mm->addr & MODES_NON_ICAO_ADDRESS) != 0);
+        ASSERT_TRUE("sbs uav uav_addr", (mm->addr & MODES_UAV_ADDRESS) != 0);
+        ASSERT_INT_EQ("sbs uav addrtype", mm->addrtype, ADDR_UAV);
+        ASSERT_EQ_UINT8("sbs uav category", mm->category, 0xB6);
+        ASSERT_TRUE("sbs uav cat_valid", mm->category_valid == 1);
+    }
+
+    fprintf(stderr, "testDecodeSbsLine: done\n\n");
+}
+
+// ---- testDecodeHexMessage ----
+
+static void testDecodeHexMessage(void) {
+    fprintf(stderr, "=== testDecodeHexMessage ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // *-AVR raw (14-byte Mode-S long message)
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        char hex[] = "*8D4B969699155600E87406F5B69F;";
+        int ret = decodeHexMessage(&test_client, hex, now, &mm);
+        ASSERT_INT_EQ("hex star ret", ret, 1);
+        ASSERT_EQ_UINT8("hex star msg0", mm.msg[0], 0x8D);
+        ASSERT_EQ_UINT8("hex star msg1", mm.msg[1], 0x4B);
+        ASSERT_EQ_I64("hex star sysTs", mm.sysTimestamp, now);
+    }
+
+    // @-AVR with 12-hex-digit timestamp
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        // @<12 hex ts><14 hex msg>;
+        // timestamp = 03BA2A7C1DD1, msg = 5D4CA7F9A0B84B (7 bytes = short)
+        char hex[] = "@03BA2A7C1DD15D4CA7F9A0B84B;";
+        int ret = decodeHexMessage(&test_client, hex, now, &mm);
+        ASSERT_INT_EQ("hex at ret", ret, 1);
+        ASSERT_EQ_U64("hex at timestamp", mm.timestamp, 0x03BA2A7C1DD1ULL);
+    }
+
+    // Missing semicolon → returns 0
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        char hex[] = "*8D4B969699155600E87406F5B69F";
+        int ret = decodeHexMessage(&test_client, hex, now, &mm);
+        ASSERT_INT_EQ("hex no semi", ret, 0);
+    }
+
+    // Too short → returns 0
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        char hex[] = "*AB;";
+        int ret = decodeHexMessage(&test_client, hex, now, &mm);
+        ASSERT_INT_EQ("hex too short", ret, 0);
+    }
+
+    // Leading/trailing whitespace stripped
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        struct modesMessage mm;
+        memset(&mm, 0, sizeof(mm));
+        char hex[] = "  *8D4B969699155600E87406F5B69F;  ";
+        int ret = decodeHexMessage(&test_client, hex, now, &mm);
+        ASSERT_INT_EQ("hex whitespace", ret, 1);
+    }
+
+    fprintf(stderr, "testDecodeHexMessage: done\n\n");
+}
+
+// ---- testDecodeBinMessage ----
+
+static void testDecodeBinMessage(void) {
+    fprintf(stderr, "=== testDecodeBinMessage ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // Type '3' (Mode-S long, 14 bytes): type + 6 ts + 1 signal + 14 msg
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char buf[32];
+        memset(buf, 0, sizeof(buf));
+        buf[0] = '3'; // type
+        // 6-byte timestamp: 0x000102030405
+        buf[1] = 0x00; buf[2] = 0x01; buf[3] = 0x02;
+        buf[4] = 0x03; buf[5] = 0x04; buf[6] = 0x05;
+        buf[7] = (char)0x80; // signal level = 128
+        // 14 bytes of message data (0x8D followed by zeros)
+        buf[8] = (char)0x8D;
+        int ret = decodeBinMessage(&test_client, buf, 1, now, &test_mb);
+        ASSERT_INT_EQ("bin type3 ret", ret, 0);
+        struct modesMessage *mm = &test_mm_storage[0];
+        ASSERT_EQ_U64("bin type3 ts", mm->timestamp, 0x000102030405ULL);
+        // signalLevel = (128/255.0)^2 ≈ 0.2519
+        ASSERT_FLOAT_NEAR("bin type3 signal", mm->signalLevel, (128.0/255.0)*(128.0/255.0), 0.001);
+        ASSERT_EQ_UINT8("bin type3 msg0", mm->msg[0], 0x8D);
+    }
+
+    // Type '2' (Mode-S short, 7 bytes)
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char buf[32];
+        memset(buf, 0, sizeof(buf));
+        buf[0] = '2'; // type
+        buf[1] = 0x00; buf[2] = 0x00; buf[3] = 0x00;
+        buf[4] = 0x00; buf[5] = 0x00; buf[6] = 0x00; // ts=0
+        buf[7] = (char)0xFF; // signal = 255 → max
+        buf[8] = (char)0x5D; // first msg byte
+        int ret = decodeBinMessage(&test_client, buf, 1, now, &test_mb);
+        ASSERT_INT_EQ("bin type2 ret", ret, 0);
+        struct modesMessage *mm = &test_mm_storage[0];
+        ASSERT_EQ_UINT8("bin type2 msg0", mm->msg[0], 0x5D);
+        // signal = (255/255)^2 = 1.0
+        ASSERT_FLOAT_NEAR("bin type2 signal", mm->signalLevel, 1.0, 0.001);
+    }
+
+    // Type '1' (Mode-A/C) with mode_ac disabled → discard
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        Modes.mode_ac = 0;
+        char buf[16];
+        memset(buf, 0, sizeof(buf));
+        buf[0] = '1';
+        int ret = decodeBinMessage(&test_client, buf, 1, now, &test_mb);
+        ASSERT_INT_EQ("bin type1 disabled", ret, 0);
+        // No message consumed
+        ASSERT_INT_EQ("bin type1 mb_len", test_mb.len, 0);
+    }
+
+    // Type '5' (Radarcape position) — 21 bytes of position data
+    {
+        resetMessageBuffer();
+        memset(&Modes, 0, sizeof(Modes));
+        char buf[32];
+        memset(buf, 0, sizeof(buf));
+        buf[0] = '5';
+        // IEEE754 LE float values at offsets 4, 8, 12 within the 21-byte payload
+        // buf[1..21] = 21 bytes, position data starts at buf[1]
+        // lat at buf[1+4]=buf[5], lon at buf[1+8]=buf[9], alt at buf[1+12]=buf[13]
+        // 51.5f LE = {0x00, 0x00, 0x4E, 0x42}
+        float lat = 51.5f, lon = -0.1f, alt = 30.0f;
+        memcpy(&buf[5], &lat, 4);
+        memcpy(&buf[9], &lon, 4);
+        memcpy(&buf[13], &alt, 4);
+        int ret = decodeBinMessage(&test_client, buf, 1, now, &test_mb);
+        ASSERT_INT_EQ("bin type5 ret", ret, 0);
+        ASSERT_FLOAT_NEAR("bin type5 lat", Modes.fUserLat, 51.5, 0.1);
+        ASSERT_FLOAT_NEAR("bin type5 lon", Modes.fUserLon, -0.1, 0.1);
+    }
+
+    fprintf(stderr, "testDecodeBinMessage: done\n\n");
+}
+
+// ---- testHandleGpsd ----
+
+static void testHandleGpsd(void) {
+    fprintf(stderr, "=== testHandleGpsd ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // Valid lat/lon/alt
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char json[] = "{\"class\":\"TPV\",\"lat\":51.5,\"lon\":-0.1,\"alt\":30.0}";
+        handle_gpsd(&test_client, json, 0, now, &test_mb);
+        ASSERT_FLOAT_NEAR("gpsd valid lat", Modes.fUserLat, 51.5, 0.001);
+        ASSERT_FLOAT_NEAR("gpsd valid lon", Modes.fUserLon, -0.1, 0.001);
+        ASSERT_FLOAT_NEAR("gpsd valid alt", Modes.fUserAlt, 30.0, 0.001);
+        ASSERT_TRUE("gpsd valid location", Modes.userLocationValid == 1);
+    }
+
+    // Missing lat → no location update
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char json[] = "{\"class\":\"TPV\",\"lon\":-0.1}";
+        handle_gpsd(&test_client, json, 0, now, &test_mb);
+        ASSERT_TRUE("gpsd no lat", Modes.userLocationValid == 0);
+    }
+
+    // Implausible lat (>89.9) → rejected
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char json[] = "{\"class\":\"TPV\",\"lat\":91.0,\"lon\":0.0}";
+        handle_gpsd(&test_client, json, 0, now, &test_mb);
+        ASSERT_TRUE("gpsd implausible", Modes.userLocationValid == 0);
+    }
+
+    // Near-zero rejection (lat<0.1 && lon<0.1)
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char json[] = "{\"class\":\"TPV\",\"lat\":0.01,\"lon\":0.01}";
+        handle_gpsd(&test_client, json, 0, now, &test_mb);
+        ASSERT_TRUE("gpsd near zero", Modes.userLocationValid == 0);
+    }
+
+    fprintf(stderr, "testHandleGpsd: done\n\n");
+}
+
+// ---- testHandleCommandSocket ----
+
+static void testHandleCommandSocket(void) {
+    fprintf(stderr, "=== testHandleCommandSocket ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // Valid deleteTrace command
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char cmd[] = "deleteTrace 4AC8B3 1000 2000";
+        handleCommandSocket(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_TRUE("cmd delete not null", Modes.deleteTrace != NULL);
+        ASSERT_EQ_U32("cmd delete hex", Modes.deleteTrace->hex, 0x4AC8B3);
+        ASSERT_EQ_I64("cmd delete from", Modes.deleteTrace->from, 1000);
+        ASSERT_EQ_I64("cmd delete to", Modes.deleteTrace->to, 2000);
+        // cleanup
+        free(Modes.deleteTrace);
+        Modes.deleteTrace = NULL;
+    }
+
+    // Too few tokens → no change
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char cmd[] = "deleteTrace 4AC8B3";
+        handleCommandSocket(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_TRUE("cmd too few", Modes.deleteTrace == NULL);
+    }
+
+    // Unknown command → no change
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char cmd[] = "unknownCmd arg1";
+        handleCommandSocket(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_TRUE("cmd unknown", Modes.deleteTrace == NULL);
+    }
+
+    fprintf(stderr, "testHandleCommandSocket: done\n\n");
+}
+
+// ---- testHandleBeastCommand ----
+
+static void testHandleBeastCommand(void) {
+    fprintf(stderr, "=== testHandleBeastCommand ===\n");
+
+    int64_t now = mstime();
+    memset(&test_client, 0, sizeof(test_client));
+    test_client.service = &test_service;
+
+    // Ping command: 'P' + 3-byte ping value
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        test_client.ping = 0;
+        test_client.pingReceived = 0;
+        test_client.pingEnabled = 0;
+        char cmd[] = {'P', 0x12, 0x34, 0x56, 0x00};
+        handleBeastCommand(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_EQ_U32("beast ping val", test_client.ping, 0x123456);
+        ASSERT_EQ_I64("beast ping recv", test_client.pingReceived, now);
+        ASSERT_TRUE("beast ping enabled", test_client.pingEnabled == 1);
+    }
+
+    // Enable Mode-AC: "1J"
+    {
+        test_client.modeac_requested = 0;
+        char cmd[] = "1J";
+        handleBeastCommand(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_TRUE("beast modeac on", test_client.modeac_requested == 1);
+    }
+
+    // Disable Mode-AC: "1j"
+    {
+        test_client.modeac_requested = 1;
+        char cmd[] = "1j";
+        handleBeastCommand(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_TRUE("beast modeac off", test_client.modeac_requested == 0);
+    }
+
+    // Reduce rate: "WS"
+    {
+        memset(&Modes, 0, sizeof(Modes));
+        char cmd[] = "WS";
+        handleBeastCommand(&test_client, cmd, 0, now, &test_mb);
+        ASSERT_EQ_I64("beast reduce", Modes.doubleBeastReduceIntervalUntil, now + PING_REDUCE_DURATION);
+    }
+
+    fprintf(stderr, "testHandleBeastCommand: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -564,6 +1145,16 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testCharToAis();
     testBam32ToDouble();
     testHexDumpString();
+    testReadFspec();
+    testReadAsterixTime();
+    testReadAsterixHighPrecisionTime();
+    testGetNextPfUnstuffedByte();
+    testDecodeSbsLine();
+    testDecodeHexMessage();
+    testDecodeBinMessage();
+    testHandleGpsd();
+    testHandleCommandSocket();
+    testHandleBeastCommand();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
