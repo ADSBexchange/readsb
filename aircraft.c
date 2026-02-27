@@ -350,7 +350,9 @@ static inline void sanitize(char *str, unsigned len) {
     }
 }
 static char *sprintDB(char *p, char *end, dbEntry *d) {
-    p = safe_snprintf(p, end, "\n\"%s%06x\":{", (d->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", d->addr & 0xFFFFFF);
+    p = safe_snprintf(p, end, "\n\"%s%06x\":{",
+        (d->addr & MODES_UAV_ADDRESS) ? "$" : ((d->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""),
+        d->addr & 0xFFFFFF);
     char *regInfo = p;
     if (d->registration[0])
         p = safe_snprintf(p, end, "\"r\":\"%.*s\",", (int) sizeof(d->registration), d->registration);
@@ -517,9 +519,16 @@ int dbUpdate(int64_t now) {
         memset(curr, 0, sizeof(dbEntry));
 
         if (!nextToken(';', &sot, &eot, &eol)) continue;
-        curr->addr = strtol(sot, NULL, 16);
+        char *addr_start = sot;
+        if (*addr_start == '$') {
+            addr_start++;
+        }
+        curr->addr = strtol(addr_start, NULL, 16);
         if (curr->addr == 0)
             continue;
+        if (*sot == '$') {
+            curr->addr |= MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS;
+        }
 
 
 #define copyDetail(d) do { memcpy(curr->d , sot, imin(sizeof(curr->d ), eot - sot)); sanitize(curr->d , sizeof(curr->d )); } while (0)

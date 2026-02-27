@@ -87,6 +87,23 @@ make AIRCRAFT_HASH_BITS=11 RTLSDR=yes OPTIMIZE="-Ofast -march=native"
 The difference of using -Ofast or -O3 over the default of -O2 is likely very minimal.
 -march=native also usually makes little difference but it might, so it's worth a try.
 
+## Testing
+
+Build the binary first, then run the test targets:
+
+```
+make -j$(nproc)     # build readsb
+make test           # unit tests (cprtests + dbtests)
+make inttest        # integration tests (requires Python 3)
+make fulltest       # both unit + integration tests
+```
+
+**Unit tests** (`make test`) validate CPR decoding and database lookup logic without starting a readsb process.
+
+**Integration tests** (`make inttest`) start readsb in `--net-only` mode, feed SBS messages over TCP, and verify JSON file output, SBS passthrough, the HTTP API, UAV/drone address handling, and process lifecycle. They use only the Python 3 standard library (no pip dependencies).
+
+Tests run automatically in CI on every push and pull request via `.github/workflows/test.yaml`.
+
 ## Configuration
 
 If required, edit `/etc/default/readsb` to set the service options, device type, network ports etc.

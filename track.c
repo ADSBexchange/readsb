@@ -1998,6 +1998,13 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         a->category = mm->category;
         a->category_updated = now;
     }
+    
+    // Set category B6 for UAV (always set for UAV, overriding any message category)
+    // Check both mm->addrtype (from current message) and a->addrtype (from aircraft state)
+    if (mm->addrtype == ADDR_UAV || a->addrtype == ADDR_UAV) {
+        a->category = 0xB6;
+        a->category_updated = now;
+    }
 
     // operational status message
     // done early to update version / HRD / TAH

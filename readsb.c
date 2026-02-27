@@ -1481,6 +1481,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         case OptModeAcAuto:
             Modes.mode_ac_auto = 1;
             break;
+        case OptEnableUav:
+            Modes.enable_uav = 1;
+            break;
         case OptNetOnly:
             Modes.net = 1;
             Modes.net_only = 1;

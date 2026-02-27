@@ -2985,10 +2985,24 @@ static int decodeSbsLine(struct client *c, char *line, int remote, int64_t now, 
 
     mm->sbsMsgType = atoi(t[2]);
 
-    if (!t[5] || strlen(t[5]) != 6) // icao must be 6 characters
+    // Check ICAO field - allow 6 hex chars or 7 chars with $ prefix
+    if (!t[5])
+        goto basestation_invalid;
+    
+    int icao_len = strlen(t[5]);
+    int is_uav = 0;
+    char *icao = t[5];
+    
+    // Check for $ prefix (UAV/drone identifier)
+    if (Modes.enable_uav && icao_len == 7 && icao[0] == '$') {
+        is_uav = 1;
+        icao = t[5] + 1;  // Skip $ prefix
+        icao_len = 6;
+    }
+    
+    if (icao_len != 6) // icao must be 6 hex characters (with or without $ prefix)
         goto basestation_invalid;
 
-    char *icao = t[5];
     unsigned char *chars = (unsigned char *) &(mm->addr);
     for (int j = 0; j < 6; j += 2) {
         int high = hexDigitVal(icao[j]);
@@ -2998,6 +3012,15 @@ static int decodeSbsLine(struct client *c, char *line, int remote, int64_t now, 
             goto basestation_invalid;
 
         chars[2 - j / 2] = (high << 4) | low;
+    }
+    
+    // Set UAV address type and non-ICAO flag if $ prefix was detected
+    if (is_uav) {
+        mm->addrtype = ADDR_UAV;
+        mm->addr |= MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS;
+        // Set category B6 (Unmanned Aerial Vehicle) for UAV
+        mm->category = 0xB6;
+        mm->category_valid = 1;
     }
 
     //fprintf(stderr, "%x type %s: ", mm->addr, t[2]);
@@ -3158,8 +3181,8 @@ static void modesSendSBSOutput(struct modesMessage *mm, struct aircraft *a, stru
     struct tm stTime_receive, stTime_now;
     int msgType;
 
-    // For now, suppress non-ICAO addresses
-    if (mm->addr & MODES_NON_ICAO_ADDRESS)
+    // Suppress non-ICAO addresses, except UAVs
+    if ((mm->addr & MODES_NON_ICAO_ADDRESS) && a->addrtype != ADDR_UAV)
         return;
 
     p = prepareWrite(writer, 200);
@@ -3217,7 +3240,9 @@ static void modesSendSBSOutput(struct modesMessage *mm, struct aircraft *a, stru
     }
 
     // Fields 1 to 6 : SBS message type and ICAO address of the aircraft and some other stuff
-    p += sprintf(p, "MSG,%d,1,1,%06X,1,", msgType, mm->addr);
+    p += sprintf(p, "MSG,%d,1,1,%s%06X,1,", msgType,
+            (a->addrtype == ADDR_UAV) ? "$" : "",
+            mm->addr & 0xFFFFFF);
 
     // Find current system time
     clock_gettime(CLOCK_REALTIME, &now);

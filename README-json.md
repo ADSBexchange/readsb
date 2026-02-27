@@ -180,12 +180,14 @@ The keys are:
   &filter_mil
   &filter_pia
   &filter_ladd
+  &filter_uav
   ```
   filter any of the base queries for these database flags:
   * filter_mil will return military aircraft
   * filter_pia using a PIA hex code
   * filter_ladd will return aircraft on the LADD list
-  these three filter options can be combined in any combination and will be connected by an OR
+  * filter_uav will return UAV/drone aircraft
+  these filter options can be combined in any combination and will be connected by an OR
   in contrast, when combining other filters they restrict an already filtered result
 
 

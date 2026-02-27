@@ -567,7 +567,7 @@ void traceWrite(struct aircraft *a, threadpool_threadbuffers_t *buffer_group) {
         //    fprintf(stderr, "recent trace write: %u\n", count2);
 
         if (recent.len > 0) {
-            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
 
             writeJsonToGzip(Modes.json_dir, filename, recent, 1);
         }
@@ -604,7 +604,7 @@ void traceWrite(struct aircraft *a, threadpool_threadbuffers_t *buffer_group) {
             full = generateTraceJson(a, tb, startFull, -1, generate_buffer, 0);
 
             if (full.len > 0) {
-                snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
 
                 writeJsonToGzip(Modes.json_dir, filename, full, 5);
             }
@@ -705,7 +705,7 @@ void traceWrite(struct aircraft *a, threadpool_threadbuffers_t *buffer_group) {
             char tstring[100];
             strftime (tstring, 100, TDATE_FORMAT, &fiftyfive);
 
-            snprintf(filename, PATH_MAX, "%s/traces/%02x/trace_full_%s%06x.json", tstring, a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            snprintf(filename, PATH_MAX, "%s/traces/%02x/trace_full_%s%06x.json", tstring, a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
             filename[PATH_MAX - 101] = 0;
 
             writeJsonToGzip(Modes.globe_history_dir, filename, hist, 9);
@@ -1607,10 +1607,10 @@ static void traceUnlink(struct aircraft *a) {
     if (!Modes.json_globe_index || !Modes.json_dir)
         return;
 
-    snprintf(filename, 1024, "%s/traces/%02x/trace_recent_%s%06x.json", Modes.json_dir, a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    snprintf(filename, 1024, "%s/traces/%02x/trace_recent_%s%06x.json", Modes.json_dir, a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
     unlink(filename);
 
-    snprintf(filename, 1024, "%s/traces/%02x/trace_full_%s%06x.json", Modes.json_dir, a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    snprintf(filename, 1024, "%s/traces/%02x/trace_full_%s%06x.json", Modes.json_dir, a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
     unlink(filename);
 
     //fprintf(stderr, "unlink %06x: %s\n", a->addr, filename);
@@ -3659,7 +3659,7 @@ void unlinkPerm(struct aircraft *a) {
 
     char filename[PATH_MAX];
 
-    snprintf(filename, PATH_MAX, "%s/%s/traces/%02x/trace_full_%s%06x.json", Modes.globe_history_dir, tstring, a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    snprintf(filename, PATH_MAX, "%s/%s/traces/%02x/trace_full_%s%06x.json", Modes.globe_history_dir, tstring, a->addr % 256, (a->addrtype == ADDR_UAV) ? "$" : ((a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : ""), a->addr & 0xFFFFFF);
     filename[PATH_MAX - 101] = 0;
 
     unlink(filename);

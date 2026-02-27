@@ -194,6 +194,8 @@ typedef enum
 
     ADDR_MODE_A = 12, /* Mode A */
 
+    ADDR_UAV = 13,           /* UAV/drone address with $ prefix */
+
     ADDR_UNKNOWN = 15/* unknown address format */
 } addrtype_t;
 
@@ -293,6 +295,7 @@ typedef enum {
 } nav_altitude_source_t;
 
 #define MODES_NON_ICAO_ADDRESS       (1<<24) // Set on addresses to indicate they are not ICAO addresses
+#define MODES_UAV_ADDRESS            (1<<25) // Set on UAV/drone addresses (always combined with MODES_NON_ICAO_ADDRESS)
 #define BADDR (0xff123456) // invalid address used to set stuff like cpr_focus and show_only default value
 
 #define MODES_INTERACTIVE_REFRESH_TIME 250      // Milliseconds
@@ -638,6 +641,7 @@ struct _Modes
     int8_t raw; // Raw output format
     int8_t mode_ac; // Enable decoding of SSR Modes A & C
     int8_t mode_ac_auto; // allow toggling of A/C by Beast commands
+    int8_t enable_uav; // Enable processing of UAV/drone data
     int8_t debug_net;
     int8_t debug_flush;
     int8_t debug_no_discard;
@@ -1270,6 +1274,7 @@ enum {
     OptSoapyBandwith,
     OptSoapyEnableAgc,
     OptSoapyGainElement,
+    OptEnableUav,
 };
 
 

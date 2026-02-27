@@ -139,6 +139,7 @@ static int filter_dbFlags(struct apiEntry *haystack, int haylen, struct apiEntry
                 || (options->filter_interesting && (e->bin.dbFlags & 2))
                 || (options->filter_pia && (e->bin.dbFlags & 4))
                 || (options->filter_ladd && (e->bin.dbFlags & 8))
+                || (options->filter_uav && (e->bin.dbFlags & 16))
            ) {
             matches[count++] = *e;
             *alloc += e->jsonOffset.len;
@@ -1176,13 +1177,21 @@ static struct char_buffer parseFetch(struct apiCon *con, struct char_buffer *req
                 char *tok = strtok_r(value, ",", &saveptr);
                 while (tok && hexCount < maxCount) {
                     int other = 0;
+                    int uav = 0;
                     if (tok[0] == '~') {
                         other = 1;
                         tok++; // skip over ~
+                    } else if (tok[0] == '$') {
+                        uav = 1;
+                        tok++; // skip over $
                     }
                     uint32_t hex = (uint32_t) strtol(tok, &endptr, 16);
                     if (tok != endptr) {
-                        hex |= (other ? MODES_NON_ICAO_ADDRESS : 0);
+                        if (uav) {
+                            hex |= MODES_NON_ICAO_ADDRESS | MODES_UAV_ADDRESS;
+                        } else if (other) {
+                            hex |= MODES_NON_ICAO_ADDRESS;
+                        }
                         hexList[hexCount] = hex;
                         hexCount++;
                         //fprintf(stderr, "%06x\n", hex);
@@ -1314,6 +1323,9 @@ static struct char_buffer parseFetch(struct apiCon *con, struct char_buffer *req
             } else if (byteMatchStrict(option, "filter_ladd")) {
                 options->filter_dbFlag = 1;
                 options->filter_ladd = 1;
+            } else if (byteMatchStrict(option, "filter_uav")) {
+                options->filter_dbFlag = 1;
+                options->filter_uav = 1;
             } else if (byteMatchStrict(option, "include_version")) {
                 con->include_version = 1;
             } else {
