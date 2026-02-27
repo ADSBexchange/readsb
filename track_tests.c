@@ -180,6 +180,38 @@ static int failures = 0;
     } \
 } while(0)
 
+#define ASSERT_FLOAT_NEAR(tag, got, expected, tol) do { \
+    double _g = (got), _e = (expected), _t = (tol); \
+    if (fabs(_g - _e) > _t) { \
+        fprintf(stderr, "%s: FAIL: got %.6f, expected %.6f (tol %.6f)\n", tag, _g, _e, _t); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_EQ_I32(tag, got, expected) do { \
+    int32_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %d, expected %d\n", tag, _g, _e); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_EQ_I64(tag, got, expected) do { \
+    int64_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %ld, expected %ld\n", tag, (long)_g, (long)_e); \
+        failures++; \
+    } \
+} while(0)
+
+#define ASSERT_EQ_U16(tag, got, expected) do { \
+    uint16_t _g = (got), _e = (expected); \
+    if (_g != _e) { \
+        fprintf(stderr, "%s: FAIL: got %u, expected %u\n", tag, _g, _e); \
+        failures++; \
+    } \
+} while(0)
+
 // ---- testComputeNic ----
 
 static void testComputeNic(void) {
@@ -437,6 +469,183 @@ static void testSourceString(void) {
     fprintf(stderr, "testSourceString: done\n\n");
 }
 
+// ---- testCurrentReduceInterval ----
+
+static void testCurrentReduceInterval(void) {
+    fprintf(stderr, "=== testCurrentReduceInterval ===\n");
+
+    // No doubling: doubleBeastReduceIntervalUntil <= now
+    Modes.net_output_beast_reduce_interval = 1000;
+    Modes.doubleBeastReduceIntervalUntil = 0;
+    ASSERT_EQ_I32("reduce no double", currentReduceInterval(5000), 1000);
+
+    // Active doubling: doubleBeastReduceIntervalUntil > now
+    Modes.net_output_beast_reduce_interval = 1000;
+    Modes.doubleBeastReduceIntervalUntil = 10000;
+    ASSERT_EQ_I32("reduce doubled", currentReduceInterval(5000), 2000);
+
+    // Exact boundary: doubleBeastReduceIntervalUntil == now → no doubling
+    Modes.net_output_beast_reduce_interval = 1000;
+    Modes.doubleBeastReduceIntervalUntil = 5000;
+    ASSERT_EQ_I32("reduce boundary", currentReduceInterval(5000), 1000);
+
+    // Cleanup
+    Modes.net_output_beast_reduce_interval = 0;
+    Modes.doubleBeastReduceIntervalUntil = 0;
+
+    fprintf(stderr, "testCurrentReduceInterval: done\n\n");
+}
+
+// ---- testCalculateMessageRate ----
+
+static void testCalculateMessageRate(void) {
+    fprintf(stderr, "=== testCalculateMessageRate ===\n");
+
+    struct aircraft a;
+    memset(&a, 0, sizeof(a));
+
+    // REMOVE_STALE_INTERVAL = 1*SECONDS = 1000
+    // mult starts at REMOVE_STALE_INTERVAL/1000.0 = 1.0
+    // For MESSAGE_RATE_CALC_POINTS=2:
+    //   k=0: sum += acc[0]*1.0,  multSum += 1.0,  mult *= 0.7 -> 0.7
+    //   k=1: sum += acc[1]*0.7,  multSum += 0.7
+    // rate = sum / multSum * messageRateMult
+
+    // Zero counts -> rate 0
+    a.messageRateAcc[0] = 0;
+    a.messageRateAcc[1] = 0;
+    Modes.messageRateMult = 1.0f;
+    calculateMessageRate(&a, 1000000);
+    ASSERT_FLOAT_NEAR("msgrate zero", a.messageRate, 0.0, 0.001);
+
+    // Known counts: acc={100,50}, mult=1.0
+    // sum = 100*1.0 + 50*0.7 = 135.0
+    // multSum = 1.0 + 0.7 = 1.7
+    // rate = 135.0/1.7 = 79.4117...
+    a.messageRateAcc[0] = 100;
+    a.messageRateAcc[1] = 50;
+    Modes.messageRateMult = 1.0f;
+    calculateMessageRate(&a, 1000000);
+    ASSERT_FLOAT_NEAR("msgrate known", a.messageRate, 79.4117, 0.01);
+
+    // Verify shift: acc[1] should now be 100, acc[0] should be 0
+    ASSERT_EQ_U16("msgrate shift[1]", a.messageRateAcc[1], 100);
+    ASSERT_EQ_U16("msgrate shift[0]", a.messageRateAcc[0], 0);
+
+    // Mult factor: acc={100,50}, messageRateMult=2.0
+    a.messageRateAcc[0] = 100;
+    a.messageRateAcc[1] = 50;
+    Modes.messageRateMult = 2.0f;
+    calculateMessageRate(&a, 2000000);
+    ASSERT_FLOAT_NEAR("msgrate mult2", a.messageRate, 158.8235, 0.01);
+
+    // Verify nextMessageRateCalc set
+    ASSERT_EQ_I64("msgrate next", a.nextMessageRateCalc, 2000000 + REMOVE_STALE_INTERVAL);
+
+    // Cleanup
+    Modes.messageRateMult = 0;
+
+    fprintf(stderr, "testCalculateMessageRate: done\n\n");
+}
+
+// ---- testCalculateMessageRateGlobal ----
+
+static void testCalculateMessageRateGlobal(void) {
+    fprintf(stderr, "=== testCalculateMessageRateGlobal ===\n");
+
+    // Known values: acc={200,100}, messageRateMult=1.0
+    // sum = 200*1.0 + 100*0.7 = 270.0
+    // multSum = 1.7
+    // rate = 270.0/1.7 = 158.8235...
+    Modes.messageRateAcc[0] = 200;
+    Modes.messageRateAcc[1] = 100;
+    Modes.messageRateMult = 1.0f;
+    int64_t now = 5000000;
+    calculateMessageRateGlobal(now);
+    ASSERT_FLOAT_NEAR("global rate", Modes.messageRate, 158.8235, 0.01);
+
+    // Verify shift: acc[1] should be 200 (shifted from [0]), acc[0] should be 0
+    ASSERT_EQ_U16("global shift[1]", Modes.messageRateAcc[1], 200);
+    ASSERT_EQ_U16("global shift[0]", Modes.messageRateAcc[0], 0);
+
+    // Verify nextMessageRateCalc
+    ASSERT_EQ_I64("global next", Modes.nextMessageRateCalc, now + REMOVE_STALE_INTERVAL);
+
+    // Cleanup
+    Modes.messageRate = 0;
+    Modes.messageRateMult = 0;
+    memset(Modes.messageRateAcc, 0, sizeof(Modes.messageRateAcc));
+
+    fprintf(stderr, "testCalculateMessageRateGlobal: done\n\n");
+}
+
+// ---- testWillAcceptData ----
+
+static void testWillAcceptData(void) {
+    fprintf(stderr, "=== testWillAcceptData ===\n");
+
+    struct aircraft a;
+    struct modesMessage mm;
+    data_validity d;
+
+    // Disable receiver ID checking for these tests
+    Modes.netReceiverId = 0;
+
+    // SOURCE_INVALID -> reject
+    {
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        mm.sysTimestamp = 1000000;
+        ASSERT_EQ_INT("accept invalid", will_accept_data(&d, SOURCE_INVALID, &mm, &a), 0);
+    }
+
+    // Timestamp regression: now < d->updated -> reject
+    {
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.updated = 2000000;
+        mm.sysTimestamp = 1000000; // before updated
+        ASSERT_EQ_INT("accept time regress", will_accept_data(&d, SOURCE_ADSB, &mm, &a), 0);
+    }
+
+    // Lower priority + fresh data -> reject
+    {
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_ADSB;
+        d.updated = 1000000;
+        mm.sysTimestamp = 1000000 + TRACK_STALE - 1; // just before stale
+        ASSERT_EQ_INT("accept lower fresh", will_accept_data(&d, SOURCE_MODE_S, &mm, &a), 0);
+    }
+
+    // Lower priority + stale data -> accept
+    {
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_ADSB;
+        d.updated = 1000000;
+        mm.sysTimestamp = 1000000 + TRACK_STALE; // exactly stale
+        ASSERT_EQ_INT("accept lower stale", will_accept_data(&d, SOURCE_MODE_S, &mm, &a), 1);
+    }
+
+    // Same priority + same/later timestamp -> accept
+    {
+        memset(&a, 0, sizeof(a));
+        memset(&mm, 0, sizeof(mm));
+        memset(&d, 0, sizeof(d));
+        d.source = SOURCE_ADSB;
+        d.updated = 1000000;
+        mm.sysTimestamp = 1000000; // same time
+        ASSERT_EQ_INT("accept same prio", will_accept_data(&d, SOURCE_ADSB, &mm, &a), 1);
+    }
+
+    fprintf(stderr, "testWillAcceptData: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -446,6 +655,10 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testAddressReliable();
     testSimpleHash();
     testSourceString();
+    testCurrentReduceInterval();
+    testCalculateMessageRate();
+    testCalculateMessageRateGlobal();
+    testWillAcceptData();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);

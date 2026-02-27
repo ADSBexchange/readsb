@@ -421,6 +421,156 @@ static void testSprintDB(void) {
     fprintf(stderr, "testSprintDB: done\n\n");
 }
 
+// ---- testQuickCache ----
+
+static void testQuickCache(void) {
+    fprintf(stderr, "=== testQuickCache ===\n");
+
+    // Init quick cache
+    quickBits = 0; // force init from scratch
+    quickResize(quickMinBits);
+    ASSERT_TRUE("quick init", quick != NULL);
+
+    // Create 3 test aircraft with different addresses
+    struct aircraft a1, a2, a3;
+    memset(&a1, 0, sizeof(a1)); a1.addr = 0x4840D6;
+    memset(&a2, 0, sizeof(a2)); a2.addr = 0xABCDEF;
+    memset(&a3, 0, sizeof(a3)); a3.addr = 0x123456;
+
+    // Get miss before add
+    ASSERT_TRUE("quick miss", quickGet(0x4840D6) == NULL);
+
+    // Add + Get
+    quickAdd(&a1);
+    {
+        struct ap *q = quickGet(0x4840D6);
+        ASSERT_TRUE("quick add+get", q != NULL);
+        ASSERT_TRUE("quick ptr", q->ptr == &a1);
+        ASSERT_UINT_EQ("quick addr", q->addr, 0x4840D6);
+    }
+
+    // Duplicate add — no change
+    quickAdd(&a1);
+    {
+        struct ap *q = quickGet(0x4840D6);
+        ASSERT_TRUE("quick dup ptr", q != NULL && q->ptr == &a1);
+    }
+
+    // Multiple entries
+    quickAdd(&a2);
+    quickAdd(&a3);
+    {
+        struct ap *q1 = quickGet(0x4840D6);
+        struct ap *q2 = quickGet(0xABCDEF);
+        struct ap *q3 = quickGet(0x123456);
+        ASSERT_TRUE("quick multi a1", q1 != NULL && q1->ptr == &a1);
+        ASSERT_TRUE("quick multi a2", q2 != NULL && q2->ptr == &a2);
+        ASSERT_TRUE("quick multi a3", q3 != NULL && q3->ptr == &a3);
+    }
+
+    // Remove
+    quickRemove(&a1);
+    ASSERT_TRUE("quick removed", quickGet(0x4840D6) == NULL);
+    // Others still present
+    ASSERT_TRUE("quick a2 after rm", quickGet(0xABCDEF) != NULL);
+    ASSERT_TRUE("quick a3 after rm", quickGet(0x123456) != NULL);
+
+    quickDestroy();
+
+    fprintf(stderr, "testQuickCache: done\n\n");
+}
+
+// ---- testAircraftGetLookup ----
+
+static void testAircraftGetLookup(void) {
+    fprintf(stderr, "=== testAircraftGetLookup ===\n");
+
+    // Init quick cache and hash table
+    quickBits = 0;
+    quickResize(quickMinBits);
+    memset(Modes.aircraft, 0, sizeof(Modes.aircraft));
+
+    // Not found
+    ASSERT_TRUE("get empty", aircraftGet(0x999999) == NULL);
+
+    // Insert aircraft directly into hash chain (bypass quickAdd)
+    struct aircraft *a = cmalloc(sizeof(struct aircraft));
+    memset(a, 0, sizeof(*a));
+    a->addr = 0x4840D6;
+    uint32_t hash = aircraftHash(0x4840D6);
+    a->next = Modes.aircraft[hash];
+    Modes.aircraft[hash] = a;
+
+    // Clear quick cache so lookup falls through to hash chain
+    quickDestroy();
+    quickBits = 0;
+    quickResize(quickMinBits);
+
+    // Lookup via hash chain
+    struct aircraft *found = aircraftGet(0x4840D6);
+    ASSERT_TRUE("get hash chain", found == a);
+
+    // After lookup, it should be in quick cache now
+    struct ap *q = quickGet(0x4840D6);
+    ASSERT_TRUE("get auto-cached", q != NULL && q->ptr == a);
+
+    // Second lookup should come from quick cache
+    struct aircraft *found2 = aircraftGet(0x4840D6);
+    ASSERT_TRUE("get cached", found2 == a);
+
+    // Cleanup
+    Modes.aircraft[hash] = NULL;
+    free(a);
+    quickDestroy();
+
+    fprintf(stderr, "testAircraftGetLookup: done\n\n");
+}
+
+// ---- testAircraftCreateAndFree ----
+
+static void testAircraftCreateAndFree(void) {
+    fprintf(stderr, "=== testAircraftCreateAndFree ===\n");
+
+    // Init
+    quickBits = 0;
+    quickResize(quickMinBits);
+    memset(Modes.aircraft, 0, sizeof(Modes.aircraft));
+    Modes.dbIndex = NULL;
+    Modes.json_globe_index = 0;
+
+    // Create sets addr
+    struct aircraft *a = aircraftCreate(0xABCDEF);
+    ASSERT_TRUE("create non-null", a != NULL);
+    ASSERT_UINT_EQ("create addr", a->addr, 0xABCDEF);
+
+    // Default fields initialized
+    ASSERT_INT_EQ("create adsb_version", a->adsb_version, -1);
+    ASSERT_TRUE("create callsign zero", a->callsign[0] == '\0');
+    ASSERT_UINT_EQ("create addrtype", a->addrtype, ADDR_UNKNOWN);
+
+    // Create again with same addr returns same pointer
+    struct aircraft *a2 = aircraftCreate(0xABCDEF);
+    ASSERT_TRUE("create dedup", a2 == a);
+
+    // Create with different addr returns different pointer
+    struct aircraft *b = aircraftCreate(0x123456);
+    ASSERT_TRUE("create different", b != a);
+    ASSERT_UINT_EQ("create addr2", b->addr, 0x123456);
+
+    // Cleanup via freeAircraft (stubs handle globe_index, ca_remove, traceCleanup)
+    uint32_t hash_a = aircraftHash(0xABCDEF);
+    uint32_t hash_b = aircraftHash(0x123456);
+
+    // Remove from hash chains manually before freeAircraft (which does quickRemove + free)
+    Modes.aircraft[hash_a] = NULL;
+    Modes.aircraft[hash_b] = NULL;
+    freeAircraft(a);
+    freeAircraft(b);
+    quickDestroy();
+
+    fprintf(stderr, "testAircraftCreateAndFree: done\n\n");
+}
+
 // ---- main ----
 
 int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) {
@@ -431,6 +581,9 @@ int main(int __attribute__((unused)) argc, char __attribute__((unused)) **argv) 
     testSanitize_clean();
     testAircraftHash();
     testSprintDB();
+    testQuickCache();
+    testAircraftGetLookup();
+    testAircraftCreateAndFree();
 
     if (failures) {
         fprintf(stderr, "\n%d FAILURE(S)\n", failures);
