@@ -1484,6 +1484,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         case OptEnableUav:
             Modes.enable_uav = 1;
             break;
+        case OptEnableBoxDwell:
+            Modes.enable_box_dwell = 1;
+            break;
         case OptNetOnly:
             Modes.net = 1;
             Modes.net_only = 1;

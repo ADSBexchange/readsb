@@ -780,7 +780,9 @@ static inline void apiAdd(struct apiBuffer *buffer, struct aircraft *a, int64_t 
         // position valid
         // else if (trackDataAge(now, &a->pos_reliable_valid) < 30 * MINUTES)
     } else if (a->nogpsCounter >= NOGPS_SHOW && now - a->seenAdsbReliable < NOGPS_DWELL) {
-        // keep in box
+        // keep in box (ADS-B lost GPS)
+    } else if (Modes.enable_box_dwell && a->seenPosReliable && now - a->seenPosReliable < NOGPS_DWELL) {
+        // keep in box at last-known position (MLAT expiry and other non-ADS-B sources)
     } else {
         // change lat / lon for sorting purposes
         entry->bin.lat = INT32_MAX;
