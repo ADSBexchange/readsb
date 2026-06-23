@@ -1,0 +1,475 @@
+sha	date	subject	files	decision	reason	needs_unit_test	needs_devenv	commit_strategy	coupled_to	status
+1d6ef5f5c	2024-06-11	invalidate CPRs when reaching position reliability zero	track.c	take	core decode/output path (critical)	y				
+c9b9020ee	2024-06-11	get going a bit quicker after reaching zero reliability	track.c	take	core decode/output path (critical)	y				
+dea46ed7b	2024-06-14	dockerfile use run mount	Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+4f7a7f18c	2024-06-14	ifile: don't use synthetic time for stdin	demod_2400.c,sdr_ifile.c	take	core decode/output path (critical)	y				
+51f21881d	2024-06-18	cpr debug print	track.c	take	core decode/output path (critical)	y				
+526c5d7ff	2024-07-09	hackrf oddities	sdr_hackrf.c	take	SDR/hardware path; low test priority	n				
+874c84ea3	2024-07-10	non-MLAT aircraft without valid track data: more trace positions	globe_index.c	take	core decode/output path (critical)	y				
+1a4c123d2	2024-07-11	fix exit on hang logic not signaling exit properly	readsb.c	take	core code (non-critical) | exit-on-hang signaling; cover via test_lifecycle	y	y		follow-up?	
+1ed7c88c0	2024-07-11	incrementing version: 3.14.1632	debian/changelog,version	skip	debian changelog metadata only					
+00433443d	2024-07-11	--devel=forwardMinMessages,2	net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+8329053d9	2024-07-12	gpsd_in: ignore non-TPV messages	net_io.c	take	core decode/output path (critical)	y				
+94c4b2dec	2024-07-13	add --devel=tar1090NoGlobe	json_out.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+07df2f253	2024-07-13	incrementing version: 3.14.1633	debian/changelog,version	skip	debian changelog metadata only					
+e04f85c7b	2024-07-13	Dockerfile: x86_64: compile with -march=nehalem	Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+6ff799e19	2024-07-17	traces: don't save more ground positions than intended	globe_index.c	take	core decode/output path (critical)	y				
+62768aadb	2024-07-19	add geomag copyright notice	geomag.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+e62917e0d	2024-07-26	don't use the rpi zero reduction of cpu usage via preamble on non-arm platforms	readsb.c	take	core code (non-critical) | perf/memory; no observable output change	n				
+a3f82ffb1	2024-07-26	incrementing version: 3.14.1634	debian/changelog,version	skip	debian changelog metadata only					
+b6715be2e	2024-08-07	supress most errors for repeated connection failures	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+f2a37b0a9	2024-08-07	net: better debug print	net_io.c	take	core decode/output path (critical)	y				
+62718821f	2024-08-07	incrementing version: 3.14.1635	debian/changelog,version	skip	debian changelog metadata only					
+d0b4e7193	2024-08-07	net-connector: improve error suppression	net_io.c	take	core decode/output path (critical)	y				
+a3a174cb8	2024-08-13	json output: fix when input is sbs input	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+d2f12d9a2	2024-08-13	incrementing version: 3.14.1636	debian/changelog,version	skip	debian changelog metadata only					
+3da4c74de	2024-08-14	add --devel=legacy_history	readsb.c,readsb.h	take	core code (non-critical) | new --devel=legacy_history output mode	y				
+cae21dc28	2024-08-14	remove legacy history json files from readme	README-json.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+e17499956	2024-08-18	update packages	Dockerfile,required_packages	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+c4ba31b49	2024-08-18	docker: use separate repo for builder	.github/workflows/docker.yaml,Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+24568a6f2	2024-08-18	incrementing version: 3.14.1637	debian/changelog,version	skip	debian changelog metadata only					
+7a651de8d	2024-08-18	docker: re-add tagged builds and build for sid	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+31aa09e44	2024-08-18	docker: remove cache	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+e7d8c49d3	2024-08-18	dockerfile yml	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+bede96fa7	2024-08-20	readsb api: support accept-encoding: zstd	api.c,api.h	take	core decode/output path (critical)	y				
+bcf81a676	2024-08-20	capitalize response headers	api.c	take	core decode/output path (critical)	y				
+4065eb486	2024-08-21	fix: Ubuntu 24.04 package name change	debian/control	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n			follow-up?	
+66a04fe82	2024-08-22	make sure SBS positions out of receiver range are not used	track.c	take	core decode/output path (critical)	y				
+5da03b53f	2024-08-22	incrementing version: 3.14.1638	debian/changelog,version	skip	debian changelog metadata only					
+e8352b6ab	2024-08-22	deb building apparently needs fakeroot	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+18ee0ef4d	2024-08-23	fixup required packages	required_packages	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+61b77e1da	2024-08-24	don't call getaddrinfo quite as often	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+6f9b0b82f	2024-08-25	add jaero exception to sbs range limit	track.c	take	core decode/output path (critical)	y				
+123fbf101	2024-08-25	incrementing version: 3.14.1639	debian/changelog,version	skip	debian changelog metadata only					
+d6932bb08	2024-09-02	make log_ppm work with argument 0 as expected	readsb.c	take	core code (non-critical) | debug/log output only	n				
+603523537	2024-09-15	copy full DB details to aircraft struct	aircraft.c,json_out.c,track.h	take	core decode/output path (critical)	y				
+78f140cc2	2024-09-16	couple of fixes to make ModeS beast work properly	5 files: net_io.c,net_io.h,readsb.c,readsb.h,sdr_beast.c	take	core decode/output path (critical)	y				
+4b1868567	2024-09-16	incrementing version: 3.14.1640	debian/changelog,version	skip	debian changelog metadata only					
+2ab35ba54	2024-09-17	cleanup df18 exception handling	aircraft.c,json_out.c,track.c,track.h	take	core decode/output path (critical)	y				
+85badfbcf	2024-09-17	streamline zlib gzbuffer things	globe_index.c,json_out.c,util.c,util.h	take	core decode/output path (critical)	y				
+85cab05e4	2024-09-17	prepare aircraft db change / cleanup	aircraft.c	take	core decode/output path (critical)	y				
+ae09ee115	2024-09-17	readwholeGz minor cleanup	util.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+7086b20e8	2024-09-17	change aircraft db to use less memory	aircraft.c,aircraft.h,readsb.h	take	core decode/output path (critical)	y				
+85b918727	2024-09-17	incrementing version: 3.14.1641	debian/changelog,version	skip	debian changelog metadata only					
+6ee23d772	2024-09-28	fixup uptime in stats	readsb.c,readsb.h,stats.c,util.c	take	core code (non-critical) | uptime in stats output; test_stats_and_history	y				
+9ef77b342	2024-10-10	fixup api thread count comment	api.c	take	core decode/output path (critical)	y				
+87d62d3c9	2024-10-10	readsb service: add CAP_SYS_NICE	debian/readsb.service	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+431f5d848	2024-10-13	net io: make some code nicer to read	net_io.c	take	core decode/output path (critical)	y				
+e7dec69f0	2024-10-17	speed_check: decrement speedUnreliable speed is unknown	track.c	take	core decode/output path (critical)	y				
+0c87e5932	2024-10-17	incrementing version: 3.14.1642	debian/changelog,version	skip	debian changelog metadata only					
+4f8a0b420	2024-10-29	make --devel=enableClientsJson work	mode_s.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+207ec6206	2024-11-01	incrementing version: 3.14.1643	debian/changelog,version	skip	debian changelog metadata only					
+6e2434f1f	2024-11-01	make it simple to save traces without enabling globe-index	6 files: globe_index.c,help.h,json_out.c,readsb.c,readsb.h,stats.c	take	core decode/output path (critical)	y				
+a0ad60b2a	2024-11-01	incrementing version: 3.14.1644	debian/changelog,version	skip	debian changelog metadata only					
+f6c06e581	2024-11-02	first attempt at quick autogain	demod_2400.c,readsb.c,readsb.h,sdr_rtlsdr.c	take	core decode/output path (critical)	y				
+e1b2cecc4	2024-11-02	default to --gain=auto	debian/readsb.default	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+739f6af7a	2024-11-02	tweak autogain	demod_2400.c,readsb.c,readsb.h,sdr_rtlsdr.c	take	core decode/output path (critical)	y				
+f40bd618d	2024-11-02	allow rtl tuner agc for autogain	6 files: readsb.c,readsb.h,sdr.c,sdr.h,sdr_rtlsdr.c,sdr_rtlsdr.h	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+e4faf7fa5	2024-11-02	incrementing version: 3.14.1645	debian/changelog,version	skip	debian changelog metadata only					
+1e276882a	2024-11-02	autogain: silent by default	readsb.c,readsb.h,sdr_rtlsdr.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+2c51b73c5	2024-11-02	make quiet autogain the default	README.md,help.h,readsb.c,readsb.h	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+31378c2ee	2024-11-02	just log 59 dB instead of tuner AGC	sdr_rtlsdr.c	take	SDR/hardware path; low test priority	n				
+80fc54619	2024-11-03	autogain: change default noise thresholds	README.md,readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+8fd5acf09	2024-11-03	autogain: print autogain settings	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+89fc77451	2024-11-03	autogain defaults tweak	README.md,readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+b4bd2f5c6	2024-11-03	autogain: reduce default loudThreshold	README.md,readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+7be4ddf30	2024-11-03	autogain: faster startup, faster reaction to very loud signals	readsb.c,readsb.h	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+15823dd47	2024-11-03	autogain: replace startingGain with lowestGain parameter	README.md,readsb.c,readsb.h	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+c67e6710e	2024-11-04	remove adsbexchange hardcoding	5 files: README.md,help.h,net_io.c,readsb.c,track.c	take	core decode/output path (critical)	y				
+7c34ff39b	2024-11-05	fixup autogain min gain setting	readsb.c,sdr_rtlsdr.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+e8de53682	2024-11-15	add range outline reset via setGain file	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+079fda30a	2024-11-18	fixup --gain -10	sdr_rtlsdr.c	take	SDR/hardware path; low test priority	n				
+c3214b36f	2024-11-19	longer dwell time for aircraft when writing traces without globe index	track.c	take	core decode/output path (critical)	y				
+2b6338496	2024-12-10	update --net-only help text	help.h,readsb.c	take	core code (non-critical) | help/README text only	n				
+fb8449754	2024-12-10	non rtl-sdr: use default gain when gain=auto passed	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+9cf1af0a1	2024-12-13	readProxy setting	net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+038b48576	2025-01-04	support non-icao addresses in SBS input/output	net_io.c	take	core decode/output path (critical)	y				
+ae987a904	2025-01-04	add comment with SBS sample message	net_io.c	take	core decode/output path (critical)	y				
+7211f3f4c	2025-01-04	improve receiver count logic	track.c	take	core decode/output path (critical)	y				
+2f7a72ed2	2025-01-04	add print to make sure we don't do too many iterations	track.c	take	core decode/output path (critical)	y				
+48ef3c0bd	2025-01-04	github action: fix readsb version to include git commit	.github/workflows/docker.yaml,Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch	follow-up?	
+3efa2b1ec	2025-01-06	traces: make sure the air ground transition is well recorded	globe_index.c	take	core decode/output path (critical)	y				
+85c087779	2025-01-10	update to world magnetic model 2025 (WMM2025)	geomag.c	take	core code (non-critical) | WMM2025 model: geomag_tests expected values MUST update	y				
+f11a5b8a2	2025-01-10	traces: use buffered position without exception	globe_index.c	take	core decode/output path (critical)	y				
+c373053c1	2025-01-10	incrementing version: 3.14.1646	debian/changelog,version	skip	debian changelog metadata only					
+d3aa1180e	2025-01-21	make tracks statistics consistent across various settings	aircraft.c,track.c	take	core decode/output path (critical)	y				
+06545364d	2025-01-21	ignore non-CRC messages after 30 seconds of last CRC message (was 45)	track.c	take	core decode/output path (critical)	y				
+2f1e4e0be	2025-01-26	only use rtl agc for rafael tuners with 29 gain steps	sdr_rtlsdr.c	take	SDR/hardware path; low test priority	n				
+33a5b080d	2025-01-26	with new arm runners shouldn't need qemu anymore	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+7b76a6a63	2025-01-26	fix rtl-sdr handling for less common tuners	sdr_rtlsdr.c	take	SDR/hardware path; low test priority	n			follow-up?	
+ff6b71adc	2025-02-03	trace saving readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+bf77bfad3	2025-02-06	"Revert ""with new arm runners shouldn't need qemu anymore"""	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch	follow-up?	
+d1b9bc918	2025-02-12	force mlat if no other position	5 files: globe_index.c,readsb.c,readsb.h,track.c,track.h	take	core decode/output path (critical)	y				
+8a2933248	2025-02-13	remove debug print	track.c	take	core decode/output path (critical)	y				
+fc0cab93c	2025-02-13	incrementing version: 3.14.1647	debian/changelog,version	skip	debian changelog metadata only					
+7cbbbe51f	2025-02-14	setLatLon	readsb.c	take	core code (non-critical) | setLatLon affects position/distance output	y				
+b65e1deb3	2025-02-20	sbs_in: don't accept invalid data	net_io.c	take	core decode/output path (critical)	y				
+8d79307e8	2025-02-26	add --process-only	help.h,net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+69ea9252d	2025-02-26	heatmap / replay: unknown altitude now allowed	globe_index.c	take	core decode/output path (critical)	y				
+bfc4a0b83	2025-02-27	incrementing version: 3.14.1648	debian/changelog,version	skip	debian changelog metadata only					
+795d69a37	2025-03-06	add config option for beast dump compression level	help.h,readsb.c,readsb.h,util.c	take	core code (non-critical) | beast/SDR serial path; not unit-testable	n				
+8d2c17718	2025-03-06	fixup debug print for autogain	readsb.c	take	core code (non-critical) | debug/log output only	n				
+cc3b5633c	2025-03-06	fix signal emitted via binCraft	globe_index.c,json_out.c,track.c,track.h	take	core decode/output path (critical)	y			follow-up?	
+24c56d024	2025-03-07	change how receiver-focus works	net_io.c	take	core decode/output path (critical)	y				
+21dd45e9e	2025-03-11	add compatibility shims for apple os x	12 files: compat,readsb.h	take	core code (non-critical) | Apple/OSX build-portability shim; n/a to Linux prod	n				
+78580426a	2025-03-11	makefile changes required for os x	Makefile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+208f32aa9	2025-03-11	rename task_info_t due to os X name collision	7 files: aircraft.c,globe_index.c,net_io.c,readsb.c,track.c,util.c,util.h	take	core decode/output path (critical)	y				
+81ef113b1	2025-03-11	geomag: suppress unused variable warning	geomag.c,sdr.c	take	core code (non-critical) | debug/log output only	n				
+98824311b	2025-03-11	anet / sdr_beast os x compat	anet.c,globe_index.c,sdr_beast.c	take	core decode/output path (critical)	y				
+55ae341a1	2025-03-11	remove unneded sendfile include	net_io.c	take	core decode/output path (critical)	y				
+3bc551f12	2025-03-11	work without eventfs on darwin	5 files: api.c,compat,net_io.c,readsb.c,util.c	take	core decode/output path (critical)	y				
+a5f3c4009	2025-03-11	make thread join work with apple	readsb.c,util.c	take	core code (non-critical) | Apple/OSX build-portability shim; n/a to Linux prod	n				
+45a9cf12b	2025-03-11	persist a feeder uuid that is given for input net connectors	net_io.c	take	core decode/output path (critical)	y				
+190b152fc	2025-03-11	fixup net connector specified uuid for incoming data	net_io.c	take	core decode/output path (critical)	y				
+ba509868e	2025-03-11	Apple / Mac OS X notes in readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+4d9d72cd5	2025-03-11	incrementing version: 3.14.1649	debian/changelog,version	skip	debian changelog metadata only					
+394a7e374	2025-03-12	os x readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+096df71e2	2025-03-12	more os X readme refinements	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+0e5dc1197	2025-03-12	create --write-json dir if it doesn't exist	readsb.c,util.c	take	core code (non-critical) | creates --write-json dir; test_output_formats/lifecycle	y				
+856294d2f	2025-03-12	readme wording	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+2410c5a4d	2025-03-12	macOS homebrew deps	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+3aba77aa3	2025-03-16	don't disconnect for garbage as quickly unless --net-ingest	net_io.c	take	core decode/output path (critical)	y				
+840e6f433	2025-03-23	improve net connector backoff for fast disconnect	net_io.c	take	core decode/output path (critical)	y				
+b2e12858c	2025-03-23	incrementing version: 3.14.1650	debian/changelog,version	skip	debian changelog metadata only					
+bed4320ca	2025-03-23	fix for fast disconnect round 2	help.h,net_io.c,readsb.c	take	core decode/output path (critical)	y			follow-up?	
+fae312f5a	2025-03-23	incrementing version: 3.14.1651	debian/changelog,version	skip	debian changelog metadata only					
+9add80230	2025-03-26	readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+b42b3c8ef	2025-03-26	make garbage ports work properly on ingest	track.c	take	core decode/output path (critical)	y				
+435bdb8c1	2025-03-28	autogain: fix wrong minimum gain value being printed	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n			follow-up?	
+4734f21fc	2025-03-30	make rate reduction logic only affect a single connection	net_io.c,net_io.h,readsb.h,track.c	take	core decode/output path (critical)	y				
+1cc309e98	2025-03-30	if the OS network buffer is full, drop every 2nd packet for 1 second	net_io.c	take	core decode/output path (critical)	y				
+e320a64f9	2025-03-30	go to smaller default buffers	help.h,net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+9aad5fc69	2025-03-30	simplify flushClient	net_io.c	take	core decode/output path (critical)	y				
+efc9c11c9	2025-03-30	don't spam data discard during tcp scaling window startup	net_io.c	take	core decode/output path (critical)	y				
+0a9730bad	2025-03-31	don't allocate globe index stuff if not needed	globe_index.c,readsb.c	take	core decode/output path (critical)	y				
+5c32b8bc6	2025-03-31	remove unused code	readsb.c,readsb.h	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+a6691ac8e	2025-03-31	only alloc rangeDirs when needed	5 files: globe_index.c,readsb.c,readsb.h,stats.h,track.c	take	core decode/output path (critical)	y				
+b251391b5	2025-03-31	minor missing cleanup on exit	readsb.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n			follow-up?	
+65904b412	2025-03-31	fix unlikely buffer overflow in apiUpdate / apiAdd	api.c	take	core decode/output path (critical)	y			follow-up?	
+53e773ad0	2025-03-31	change AIRCRAFT_HASH_BITS to a command line argument	8 files: aircraft.c,globe_index.c,help.h,json_out.c,readsb.c,readsb.h,stats.c,track.c	take	core decode/output path (critical)	y				
+171caff26	2025-03-31	only allocate Modes.globeLists when globe-index is used	readsb.c,readsb.h	take	core code (non-critical) | perf/memory; no observable output change	n				
+c5e00ac2c	2025-03-31	incrementing version: 3.14.1652	debian/changelog,version	skip	debian changelog metadata only					
+aaa9bcdb2	2025-04-01	fix network output buffer for json output	net_io.c,net_io.h,readsb.c	take	core decode/output path (critical)	y			follow-up?	
+ea003955c	2025-04-01	incrementing version: 3.14.1653	debian/changelog,version	skip	debian changelog metadata only					
+62f50d5a3	2025-04-01	adjust buffers for large ro-size better	net_io.c,readsb.c	take	core decode/output path (critical)	y				
+b10c89e13	2025-04-01	network buffer comments / debugging switches for flushWrites	help.h,net_io.c,readsb.c	take	core decode/output path (critical)	y				
+032f7c905	2025-04-01	data drop logic: tolerate bad connections better	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+526d789b7	2025-04-01	incrementing version: 3.14.1654	debian/changelog,version	skip	debian changelog metadata only					
+288f2333b	2025-04-01	data drop logic: minor simplification	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+5c4c84fa3	2025-04-01	go back to 5 min interval for showing data drop message	net_io.c	take	core decode/output path (critical)	y				
+e95f68f1f	2025-04-01	incrementing version: 3.14.1655	debian/changelog,version	skip	debian changelog metadata only					
+2e65b0d15	2025-04-01	debugFlush: just show data drop stuff	net_io.c	take	core decode/output path (critical)	y				
+b447a0299	2025-04-01	shorten data drop message	net_io.c	take	core decode/output path (critical)	y				
+9cb2df9ed	2025-04-01	avoid negative lost percentages due to ping bytes	net_io.c	take	core decode/output path (critical)	y				
+3196a7cb4	2025-04-01	once a connection succeeds, do a fresh DNS lookup on reconnect	net_io.c	take	core decode/output path (critical)	y				
+6ec88bffc	2025-04-01	minor free on exit	readsb.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+37137b20d	2025-04-01	don't reuse DNS lookups for 60 seconds	net_io.c	take	core decode/output path (critical)	y				
+4f4fe243e	2025-04-01	incrementing version: 3.14.1656	debian/changelog,version	skip	debian changelog metadata only					
+5f6e635ae	2025-04-02	minor fix for net connect error suppression	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+86d13b608	2025-04-02	remove last_flush logic	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+7f2370080	2025-04-02	getaddrinfo notes	net_io.c	take	core decode/output path (critical)	y				
+329c86637	2025-04-02	net connector: ignore 0.0.0.0 and :: as DNS replies	net_io.c	take	core decode/output path (critical)	y				
+40c15cbcd	2025-04-02	slow down connect attempts for multiple DNS results	net_io.c	take	core decode/output path (critical)	y				
+88be759a5	2025-04-03	binCraft: improve rssi representation	aircraft.c,readsb.c,track.h	take	core decode/output path (critical)	y				
+aeb54398f	2025-04-03	slight cpu reduction: ground track calculation: use atan2f instead of atan	mode_s.c,net_io.c	take	core decode/output path (critical)	y				
+2b5abcc6d	2025-04-03	minor cpu savings in greatcircle calc	util.c	take	core code (non-critical) | greatcircle distance calc change; util_tests	y				
+2bd9d41d0	2025-04-03	move stuff around, mess with bearing function a bit	track.h,util.c,util.h	take	core decode/output path (critical)	y				
+175bf2472	2025-04-07	fixup make test	Makefile,readsb.h	take	core code (non-critical) + touches build (resolve to ADSBx side) | fixes make test target itself; test plumbing not new coverage | retag->take: build hunks reconciled by tip customization patch	n		tip-patch		
+a38449fea	2025-04-07	deb build: no need to set non-default hash bits anymore	debian/rules	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+e97ea0e47	2025-04-14	incrementing version: 3.14.1657	debian/changelog,version	skip	debian changelog metadata only					
+4bd63b8d1	2025-04-17	ignore DF types with icao CRC quicker after receiving zero CRC	track.c	take	core decode/output path (critical)	y				
+6ede38d98	2025-04-17	unify place where sockopts are set, set TCP_NODELAY	net_io.c	take	core decode/output path (critical)	y				
+1a58f4eae	2025-04-18	fix net receiver id forwarding	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+1355d9b10	2025-04-18	incrementing version: 3.14.1658	debian/changelog,version	skip	debian changelog metadata only					
+56e653342	2025-04-19	somewhat dynamically resize receiver table	net_io.c,readsb.c,receiver.c	take	core decode/output path (critical)	y				
+ebcd1e04e	2025-04-19	improve reduce_forward for quickly alternating squawk	track.c	take	core decode/output path (critical)	y				
+3fa691e3f	2025-04-19	ingest: remove unreasonably high message rate clients	net_io.c,net_io.h,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+151e73638	2025-04-19	incrementing version: 3.14.1659	debian/changelog,version	skip	debian changelog metadata only					
+72b024a94	2025-04-19	slightly more reliably send position messages often for beast reduce logic	track.c,track.h	take	core decode/output path (critical)	y				
+f819fa3e8	2025-04-19	incrementing version: 3.14.1660	debian/changelog,version	skip	debian changelog metadata only					
+d43d7d814	2025-04-19	make quickGet slightly quicker	aircraft.c	take	core decode/output path (critical)	y				
+0ec418431	2025-04-20	don't warn as strictly about save_blob duration	readsb.c	take	core code (non-critical) | debug/log output only	n				
+6d0c20682	2025-04-24	nogrind.sh gdb	nogrind.sh	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+2ef2b0b37	2025-04-24	add some rarely useful debug code	track.c	take	core decode/output path (critical)	y				
+ce8575d36	2025-04-24	prevent emitting old data after client disconnect / connect	net_io.c	take	core decode/output path (critical)	y				
+08484db8c	2025-04-24	debug tweaks	track.c	take	core decode/output path (critical)	y				
+8660f1f65	2025-04-24	traceLast no output	globe_index.c,readsb.c,readsb.h,track.h	take	core decode/output path (critical)	y				
+e9a6ea0bd	2025-04-24	use traceLast to add granular data to full and history traces	globe_index.c,json_out.c,json_out.h,readsb.c	take	core decode/output path (critical)	y				
+1c3209739	2025-04-24	with SDR: more consistently forward messages	net_io.c	take	core decode/output path (critical)	y				
+7aedf5d32	2025-04-24	incrementing version: 3.14.1661	debian/changelog,version	skip	debian changelog metadata only					
+44c867fff	2025-04-25	traceLast: don't write extra data to json if aircraft still active	json_out.c	take	core decode/output path (critical)	y				
+e64d45b1e	2025-04-25	incrementing version: 3.14.1662	debian/changelog,version	skip	debian changelog metadata only					
+5a6dd3a71	2025-04-25	comment	json_out.c	take	core decode/output path (critical)	y				
+fcde5abac	2025-04-26	try other IPs from DNS for instant disconnect	net_io.c	take	core decode/output path (critical)	y				
+b16bffc56	2025-04-26	globe-index traces: reduce /run memory usage for inactive aircraft	globe_index.c	take	core decode/output path (critical)	y				
+bfc8b2e70	2025-04-26	add ignore_synthetic	net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+a42c4c0f9	2025-04-26	accept_synthetic disconnect: hexdump some data	net_io.c	take	core decode/output path (critical)	y				
+f90e746e2	2025-04-26	incrementing version: 3.14.1663	debian/changelog,version	skip	debian changelog metadata only					
+1a7b5d4b7	2025-04-26	typo	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+be6d87b6c	2025-04-26	beast dump timestamp handling: better defaults	net_io.c	take	core decode/output path (critical)	y				
+3b6eab568	2025-04-26	reduce trace memory usage	globe_index.c,readsb.c	take	core decode/output path (critical)	y				
+9fce12946	2025-04-26	comment on extening zstd data	globe_index.c	take	core decode/output path (critical)	y				
+a42b149ed	2025-04-26	debug output	globe_index.c	take	core decode/output path (critical)	y				
+b66f00cd4	2025-04-26	more consistently extend traceChunks	globe_index.c	take	core decode/output path (critical)	y				
+60ee90632	2025-04-26	recompress trace chunks for a bit of memory saving	globe_index.c,track.h	take	core decode/output path (critical)	y				
+b0865e9d2	2025-04-26	traceChunk logic: better deal with inactive timespans in traces	globe_index.c	take	core decode/output path (critical)	y				
+0ae0a51cc	2025-04-27	recompressStateChunk: more statistics	globe_index.c	take	core decode/output path (critical)	y				
+1a6822689	2025-04-27	trace heuristic: more resolution for altitude changes	globe_index.c	take	core decode/output path (critical)	y				
+72b20df84	2025-04-27	incrementing version: 3.14.1664	debian/changelog,version	skip	debian changelog metadata only					
+6b04939a0	2025-04-28	minor tracechunk logic improvement	globe_index.c	take	core decode/output path (critical)	y				
+de411030e	2025-04-28	stateChunk: specify int size	track.h	take	core decode/output path (critical)	y				
+3dbbe4a2c	2025-04-28	fix rare occurrence of recent trace missing after initial trace write	globe_index.c,json_out.c,readsb.c	take	core decode/output path (critical)	y			follow-up?	
+86533e82c	2025-04-28	traceLastNext shuffle	globe_index.c	take	core decode/output path (critical)	y				
+f7c66f496	2025-04-28	incrementing version: 3.14.1665	debian/changelog,version	skip	debian changelog metadata only					
+f3ceb3d35	2025-04-28	cleanup trace dir creation a little bit	globe_index.c	take	core decode/output path (critical)	y				
+ff6da7c29	2025-04-29	conditional deactivation of recompression	globe_index.c,readsb.c	take	core decode/output path (critical)	y				
+cc3f1fc19	2025-04-30	debug cleanup	globe_index.c	take	core decode/output path (critical)	y				
+327fd6f0a	2025-04-30	reduce frequency of permanent trace writes	globe_index.c,globe_index.h,json_out.c	take	core decode/output path (critical)	y				
+cac81e77d	2025-04-30	proper receiver count for aircraft without position	track.c,track.h	take	core decode/output path (critical)	y				
+ee9f94041	2025-04-30	incrementing version: 3.14.1666	debian/changelog,version	skip	debian changelog metadata only					
+9705fc674	2025-04-30	trace writing: make it easier to see different trace writes in flame graphs	globe_index.c	take	core decode/output path (critical)	y				
+abc0201bd	2025-04-30	makefile add LTO option	Makefile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+bbf446ad0	2025-05-01	improve help for --device-type ifile	README.md,help.h	take	core code (non-critical) | help/README text only	n				
+cb2f04a9e	2025-05-01	incrementing version: 3.14.1667	debian/changelog,version	skip	debian changelog metadata only					
+89de90c10	2025-05-01	add example for simple webserver to MacOS instructions	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+a22572a89	2025-05-01	trace stuff cleanup / soften midnight IOPS spike	globe_index.c	take	core decode/output path (critical)	y				
+1ac848953	2025-05-01	api buffer minor tweak	api.c	take	core decode/output path (critical)	y				
+38be34f18	2025-05-01	make api hash automatically resize to save 4MB of memory for most installs	api.c,api.h	take	core decode/output path (critical)	y				
+8311b5345	2025-05-01	fixup filter_callsign API / cleanup some bad constants in api code	api.c,api.h,util.h	take	core decode/output path (critical)	y				
+0b495c588	2025-05-02	incrementing version: 3.14.1668	debian/changelog,version	skip	debian changelog metadata only					
+8cac43bcd	2025-05-02	getUptime: never use synthetic timestamp	util.c	take	core code (non-critical) | getUptime no synthetic ts; stats output	y				
+3df53b3ab	2025-05-02	use mmap to take advantage of 2MB (or multiple) mappings that are automatically 	readsb.c,readsb.h	take	core code (non-critical) | perf/memory; no observable output change	n				
+a59431f1a	2025-05-05	only write permanent traces near the end of the day	globe_index.c,globe_index.h	take	core decode/output path (critical)	y				
+4e320be84	2025-05-05	use mmap for aircraft object storage under certain conditions	7 files: aircraft.c,aircraft.h,globe_index.c,globe_index.h,readsb.c,readsb.h,track.h	take	core decode/output path (critical)	y				
+d76bf09b1	2025-05-05	keep track of memory used for aircraft structs	aircraft.c,massif.sh,readsb.h,stats.c	take	core decode/output path (critical)	y				
+61d5566fb	2025-05-05	parallel state loading aircraftCreate: explain why we don't need a mutex for thi	aircraft.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+cdf22bb46	2025-05-05	better maintain quickGet	aircraft.c,track.c	take	core decode/output path (critical)	y				
+b43a43d6a	2025-05-05	add spinlock, don't use it though	5 files: aircraft.c,readsb.c,readsb.h,util.c,util.h	take	core decode/output path (critical)	y				
+46ad2fc16	2025-05-05	readme / help: use file instead filepath	README.md,help.h	take	core code (non-critical) | help/README text only	n				
+301aa03cb	2025-05-05	incrementing version: 3.14.1669	debian/changelog,version	skip	debian changelog metadata only					
+3edb4e7b7	2025-05-06	use aircraftBack to reduce memory fragmentation even without thp	aircraft.c	take	core decode/output path (critical)	y				
+50b2a290c	2025-05-06	incrementing version: 3.14.1670	debian/changelog,version	skip	debian changelog metadata only					
+7423fcc45	2025-05-06	add free on exit for valgrind	aircraft.c,readsb.c	take	core decode/output path (critical)	y				
+9e5d95f7c	2025-05-06	save 4 MB of memory when using --db-file	readsb.h	take	core code (non-critical) | perf/memory; no observable output change	n				
+266ce73db	2025-05-06	fix minor memory stat issue	aircraft.c	take	core decode/output path (critical)	y			follow-up?	
+33cd3b4b3	2025-05-07	work around global data with ground positions while a receiver location is provi	readsb.c,readsb.h,track.c	take	core decode/output path (critical)	y				
+601d52bfd	2025-05-10	better logging when using ModeS Beast	net_io.c	take	core decode/output path (critical)	y				
+af0982436	2025-05-11	reset aircraft message count when it's been inactive for 15 minutes	track.c	take	core decode/output path (critical)	y				
+09a1f5bff	2025-05-11	fixup global message rate calculation	track.c	take	core decode/output path (critical)	y				
+d280b540f	2025-05-11	incrementing version: 3.14.1671	debian/changelog,version	skip	debian changelog metadata only					
+5bf3030c9	2025-05-11	thread pool buffers: release regularly	readsb.c,threadpool.c,util.c	take	core code (non-critical) | perf/memory; no observable output change	n				
+d63f888a6	2025-05-11	remove unused minilzo dependency	Makefile,globe_index.c,readsb.c,readsb.h	take	core decode/output path (critical) + touches build (resolve to ADSBx side) | retag->take: build hunks reconciled by tip customization patch	y		tip-patch		
+940d7ff52	2025-05-11	remove minizlo dependency: code folder	8 files: minilzo	take	vendored lib only	n				
+9ee3e116e	2025-05-12	netDrainMessageBuffers: drain all of them	net_io.c	take	core decode/output path (critical)	y				
+6a9f6432c	2025-05-12	add baudrate, cosmetics	sdr.c,sdr_beast.c	take	core code (non-critical) | beast/SDR serial path; not unit-testable	n				
+ece78830a	2025-05-12	mode-s beast: hopefully fix baud setting	compat/apple/serial_compat.h,help.h,sdr_beast.c	take	core code (non-critical) | beast/SDR serial path; not unit-testable	n			follow-up?	
+1db569169	2025-05-12	incrementing version: 3.14.1672	debian/changelog,version	skip	debian changelog metadata only					
+f7c42168e	2025-05-22	some unused code to print bar graph on console for message rate	track.c	take	core decode/output path (critical)	y				
+9d95f40ee	2025-05-22	--full-trace-dir option to reduce memory usage of --write-globe-index at the exp	globe_index.c,help.h,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+7ecb58dcd	2025-05-23	incrementing version: 3.14.1673	debian/changelog,version	skip	debian changelog metadata only					
+c677ad243	2025-05-23	docker jemalloc: slight memory savings	Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+aff96e812	2025-05-23	incrementing version: 3.14.1674	debian/changelog,version	skip	debian changelog metadata only					
+2002728ea	2025-05-23	don't mess with trace_next_perm on load	globe_index.c	take	core decode/output path (critical)	y				
+94ac38dc6	2025-05-23	try and spread out perm writes better	globe_index.c	take	core decode/output path (critical)	y				
+a06500910	2025-05-24	better update receiverlist for receivers that are not quite as low latency	track.c	take	core decode/output path (critical)	y				
+05408c530	2025-05-24	add some thread count limits	api.c,globe_index.c,readsb.c	take	core decode/output path (critical)	y				
+7153cbe14	2025-05-24	incrementing version: 3.14.1675	debian/changelog,version	skip	debian changelog metadata only					
+d3eb56779	2025-05-24	better way to set priority for trace pool	readsb.c	take	core code (non-critical) | perf/memory; no observable output change	n				
+669cdca11	2025-05-24	traces: add version string	Makefile,json_out.c	take	core decode/output path (critical) + touches build (resolve to ADSBx side) | retag->take: build hunks reconciled by tip customization patch	y		tip-patch		
+eb117e317	2025-05-26	fine grained ground positions if speed changes	globe_index.c	take	core decode/output path (critical)	y				
+aa7a40fd6	2025-05-26	add 30 seconds of max resolution before landing	globe_index.c	take	core decode/output path (critical)	y				
+c9780a584	2025-05-26	higher resolution for 30 seconds after airground change	globe_index.c,track.c,track.h	take	core decode/output path (critical)	y				
+a470d6051	2025-05-26	"Revert ""better update receiverlist for receivers that are not quite as low laten"	track.c	take	core decode/output path (critical)	y			follow-up?	
+86d599842	2025-05-26	fine grained ground positions if speed changes not that great remove	globe_index.c	take	core decode/output path (critical)	y				
+688111f15	2025-05-26	incrementing version: 3.14.1676	debian/changelog,version	skip	debian changelog metadata only					
+ffd36f5dc	2025-05-27	improve non position data reduce forwarding for --net-ingest instances	track.c	take	core decode/output path (critical)	y				
+4a77ba19f	2025-05-27	incrementing version: 3.14.1677	debian/changelog,version	skip	debian changelog metadata only					
+a2856a18e	2025-05-27	regularly reallocate certain buffers	globe_index.c	take	core decode/output path (critical)	y				
+d0df62f24	2025-05-27	better debugging / allow more compressCurrent passes	globe_index.c	take	core decode/output path (critical)	y				
+e5a4fe909	2025-05-27	autogain: recover gain much quicker	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+3862d1d5a	2025-05-27	autogain: much quicker rebound for closeby passing aircraft	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+ecdf45ffe	2025-05-27	incrementing version: 3.14.1678	debian/changelog,version	skip	debian changelog metadata only					
+a28302c32	2025-05-27	writing fulltrace: always mark legs	globe_index.c	take	core decode/output path (critical)	y				
+1ecee5743	2025-05-28	autogain loud rebound: not quite as fast	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+65dfd86a9	2025-05-28	incrementing version: 3.14.1679	debian/changelog,version	skip	debian changelog metadata only					
+9f6e870c4	2025-05-28	add lock around some trace handling	globe_index.c,track.h	take	core decode/output path (critical)	y				
+a2e98afe9	2025-05-28	some more traceLock	track.c	take	core decode/output path (critical)	y				
+e77bb4e3d	2025-05-28	remove incorrect comment	track.c	take	core decode/output path (critical)	y				
+1a9629f21	2025-05-28	removestale: iterate all aircraft less often	track.c	take	core decode/output path (critical)	y				
+3bf279d9e	2025-05-28	no traceMaintenance calls unless needed	track.c	take	core decode/output path (critical)	y				
+60bb6ec89	2025-05-28	debug stuff	track.c	take	core decode/output path (critical)	y				
+605e0aade	2025-05-30	fixup some trace logic things	globe_index.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+cd775cba7	2025-05-30	increase traceLast default to 96	readsb.c	take	core code (non-critical) | perf/memory; no observable output change (validate default change in dev)	n	y			
+04454843b	2025-05-30	after landing / takeoff: up to 60 seconds of data every second	globe_index.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+4e4c61f08	2025-05-30	incrementing version: 3.14.1680	debian/changelog,version	skip	debian changelog metadata only					
+5faf09687	2025-06-02	binCraft: better switching between message rate and message count	json_out.c,readsb.h,stats.c	take	core decode/output path (critical)	y				
+f2b6d3f29	2025-06-02	incrementing version: 3.14.1681	debian/changelog,version	skip	debian changelog metadata only					
+67614a236	2025-06-02	binCraft messagerate fixup	api.c,json_out.c	take	core decode/output path (critical)	y				
+04b69dfd0	2025-06-02	incrementing version: 3.14.1682	debian/changelog,version	skip	debian changelog metadata only					
+554a17ded	2025-06-02	reference homebrew recipe	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+c7a309b62	2025-06-18	when using an SDR only forward first message from a plane when no fixed bits	net_io.c	take	core decode/output path (critical)	y				
+600772272	2025-06-18	incrementing version: 3.14.1683	debian/changelog,version	skip	debian changelog metadata only					
+75decb53c	2025-06-19	don't delay using jaero positions when low jaero timeout set	track.c	take	core decode/output path (critical)	y				
+f583afe8e	2025-06-27	write full traces less often	Makefile,globe_index.c,globe_index.h	take	core decode/output path (critical) + touches build (resolve to ADSBx side) | retag->take: build hunks reconciled by tip customization patch	y		tip-patch		
+85d434726	2025-07-01	tweak autogain: make single loudEvent sufficient to reduce gain	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+452cb976c	2025-07-01	incrementing version: 3.14.1684	debian/changelog,version	skip	debian changelog metadata only					
+5073f10c7	2025-07-10	improve altitude reliability check	track.c	take	core decode/output path (critical)	y				
+60f296747	2025-07-10	incrementing version: 3.14.1685	debian/changelog,version	skip	debian changelog metadata only					
+554fd755d	2025-07-10	minor fixup for altitude reliability check	track.c	take	core decode/output path (critical)	y				
+12edce9a4	2025-07-10	don't disrupt alt_reliable due to disagreeing lower quality data	track.c	take	core decode/output path (critical)	y				
+92be7701c	2025-07-10	accept alt from mlat sbs input	track.c	take	core decode/output path (critical)	y				
+62e6cb294	2025-07-10	minor alt update stuff	track.c	take	core decode/output path (critical)	y				
+8740084e0	2025-07-10	incrementing version: 3.14.1686	debian/changelog,version	skip	debian changelog metadata only					
+81f5293ba	2025-07-10	debug stuff	track.c	take	core decode/output path (critical)	y				
+8b495ebdf	2025-07-10	alt update minor	track.c	take	core decode/output path (critical)	y				
+8087d37a4	2025-07-11	json mlat / tisb flags array: add alt_baro	json_out.c	take	core decode/output path (critical)	y				
+ac891f8a4	2025-07-11	incrementing version: 3.14.1687	debian/changelog,version	skip	debian changelog metadata only					
+6d4bb7302	2025-07-12	altitude update debugging stuff	track.c	take	core decode/output path (critical)	y				
+e6ed99481	2025-07-12	readme	README-json.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+b1487aca5	2025-07-15	--gain=auto: increase default noiseLowThreshold a bit	README.md,readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+3b501c105	2025-07-15	incrementing version: 3.14.1688	debian/changelog,version	skip	debian changelog metadata only					
+451221d54	2025-07-15	autogain: debounce loudRebound a bit	readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+bf82d5c76	2025-07-15	incrementing version: 3.14.1689	debian/changelog,version	skip	debian changelog metadata only					
+9cb37df8a	2025-07-15	incrementing version: 3.14.1690	debian/changelog,version	skip	debian changelog metadata only					
+77296c980	2025-07-20	net_io: use global ais_charset definition	net_io.c	take	core decode/output path (critical)	y				
+f743b90e7	2025-07-20	ais_charset, uat2esnt: ensure ais_charset is a NUL-terminated string	ais_charset.c,ais_charset.h,uat2esnt/uat2esnt.c	take	core code (non-critical) | ais_charset NUL-termination; ais_charset_tests	y				
+dab71ee4a	2025-07-20	interactive, uat2esnt: use __nonstring__ attribute for byte arrays	interactive.c,readsb.h,uat2esnt/uat.h,uat2esnt/uat_decode.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+21d399deb	2025-07-21	extend char arrays to avoid unterminated strings	interactive.c,readsb.h,uat2esnt/uat.h,uat2esnt/uat_decode.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+58040bfe4	2025-07-28	parse SBS receive timestamp	net_io.c	take	core decode/output path (critical)	y				
+71e4a7dee	2025-07-28	incrementing version: 3.14.1691	debian/changelog,version	skip	debian changelog metadata only					
+b8250c42e	2025-07-28	readme: link some projects using this software	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+86f2be0db	2025-07-28	sbs input: prevent parsing timestamps from the future	net_io.c	take	core decode/output path (critical)	y				
+45b6ec3c4	2025-08-01	clear range outline as expected when no data is coming in	track.c	take	core decode/output path (critical)	y				
+48449b0a2	2025-08-01	incrementing version: 3.14.1692	debian/changelog,version	skip	debian changelog metadata only					
+28f664663	2025-08-02	fixup SBS time parsing	net_io.c	take	core decode/output path (critical)	y				
+c42e66d3b	2025-08-02	incrementing version: 3.14.1693	debian/changelog,version	skip	debian changelog metadata only					
+2fac6025b	2025-08-10	traces: fix roll overflow by reducing accuracy	track.h	take	core decode/output path (critical)	y			follow-up?	
+3a91797ab	2025-08-10	incrementing version: 3.14.1694	debian/changelog,version	skip	debian changelog metadata only					
+5a3d6f2ac	2025-08-14	make json location accuracy work more reliably on indirect data	help.h,json_out.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+3c337324c	2025-08-14	incrementing version: 3.14.1695	debian/changelog,version	skip	debian changelog metadata only					
+25eb72f0d	2025-08-15	viewadsb: improve altitude sorting stability	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+4493ff430	2025-08-15	viewadsb: only sort every 3 seconds	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+f4d29c888	2025-08-15	reduce viewadsb refresh from 0.25 to 0.5 seconds	readsb.h	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+74f2d9d01	2025-08-15	viewadsb: only clear errors every 10 seconds	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+0867262d9	2025-08-15	add support for uat messages encapsulated in the beast stream	net_io.c	take	core decode/output path (critical)	y				
+130c6f47c	2025-08-15	read_uuid in beast stream: handle partial buffer correctly	net_io.c	take	core decode/output path (critical)	y				
+2ff826d46	2025-08-15	incrementing version: 3.14.1696	debian/changelog,version	skip	debian changelog metadata only					
+234dad576	2025-08-15	fixup encapsulated UAT	net_io.c	take	core decode/output path (critical)	y				
+de952d873	2025-08-15	interactive: speed 4 wide for --metric	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+b6c96747b	2025-08-15	interactive: consistently sort ground	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+eaa4085fa	2025-08-15	interactive: when lat lon specified, show distance / direction and sort by dista	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+c77b06279	2025-08-15	interactive minor readability changes	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+539e11d46	2025-08-15	interactive sort stability for aircraft on ground	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+9c55bcdd6	2025-08-17	debian rules	debian/control,debian/rules	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+63acbde9e	2025-08-17	incrementing version: 3.14.1697	debian/changelog,version	skip	debian changelog metadata only					
+e70292810	2025-08-17	big version jump: 3.15	tag.sh,version	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+b60583a85	2025-08-17	incrementing version: 3.15.1	debian/changelog,version	skip	debian changelog metadata only					
+32c0ced0d	2025-08-17	specify build dep libsoapysdr-dev in readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+e1ec52c42	2025-08-18	build with all the SDR support	README.md,debian/control,debian/rules	adapt	debian SDR build profile may affect dpkg-buildpackage -Prtlsdr; verify			verify-packaging		
+5b1e05c97	2025-08-18	update debian copyright at least partially	debian/copyright	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+ea1e279a2	2025-08-18	debian package: build faster with make -j $(nprocs)	debian/rules	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+ce09d1aeb	2025-08-18	cleanup readsb.service / readsb.default	debian/readsb.default,debian/readsb.service	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+878763238	2025-08-18	update debian package description	debian/control	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+548ecb269	2025-08-18	readme: add some credits / history	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+dd59d1d76	2025-08-18	autogenerate manpages using help2man	debian/control,debian/readsb.1,debian/rules,debian/viewadsb.1	take	debian packaging (ADSBx does not fork debian/); keeps deb build current	n				
+26d725d3e	2025-08-18	print some credits in help	argp.c,argp.h,help.h	take	core code (non-critical) | help/README text only	n				
+798f32f04	2025-08-18	incrementing version: 3.15.2	debian/changelog,version	skip	debian changelog metadata only					
+604042f18	2025-08-18	readme: update build instructions	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+4e38f3123	2025-08-18	more flexible tag.sh	changelog,tag.sh	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+7ef806ab6	2025-08-18	tag.sh: add notes for releasing a version	tag.sh	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+1a51ad707	2025-08-18	fixup tag.sh to include changelog from main directory	tag.sh	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+9a962dc10	2025-08-18	tag.sh add newline after unreleased changelog entry	tag.sh	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+b0e673bef	2025-08-18	add with_sdrs build profile	README.md,debian/control,debian/rules	adapt	debian SDR build profile may affect dpkg-buildpackage -Prtlsdr; verify			verify-packaging		
+6927c3579	2025-08-18	release 3.16	changelog,debian/changelog,version	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+41bde73c0	2025-08-18	readme: fixup missing help2man dependency	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README				follow-up?	
+57e1c0b0e	2025-08-27	load_state: somewhat better handling of broken state data	6 files: aircraft.c,aircraft.h,globe_index.c,globe_index.h,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+5d6ce7a0d	2025-08-27	aircraft loading: can't rely on blob association staying the same	globe_index.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+05c70f90d	2025-08-27	dealing with messed up state is tricky	globe_index.c	take	core decode/output path (critical)	y				
+0cea2aa2e	2025-08-27	incrementing version: 3.16.1	debian/changelog,version	skip	debian changelog metadata only					
+e4bf34081	2025-08-31	remove unnecessarly newlines from ownOp/year details in json	json_out.c	take	core decode/output path (critical)	y				
+5950f7448	2025-09-06	increase output buffer for uat2esnt conversion	net_io.c	take	core decode/output path (critical)	y				
+44daf02ff	2025-09-06	add ugly way to process specially beast encapsulated UAT messages	net_io.c	take	core decode/output path (critical)	y				
+990bafb14	2025-09-06	minor stuff to more obviously guarantee progress processing beast	net_io.c	take	core decode/output path (critical)	y				
+7335e0c01	2025-09-08	distance approximation: go back to elliptical earth	util.c	take	core code (non-critical) | distance calc back to elliptical earth; util_tests	y				
+460c9fc6b	2025-09-08	distance approximations aren't that good, less noisy when checking approx	util.c	take	core code (non-critical) | debug/log output only	n				
+3852ad21e	2025-09-08	less noisy checking degree approx	util.c	take	core code (non-critical) | debug/log output only	n				
+786c1ac79	2025-09-09	prevent traceLast data from the previous day in history traces	globe_index.c,json_out.c,json_out.h	take	core decode/output path (critical)	y				
+4c1459a82	2025-09-10	incrementing version: 3.16.2	debian/changelog,version	skip	debian changelog metadata only					
+6ee71cfaa	2025-09-25	debug for decodeEncapsulatedUAT	net_io.c	take	core decode/output path (critical)	y				
+3623c68f0	2025-09-25	decodeEncapsulatedUat: fix, this should work now	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+03a2bf526	2025-09-25	incrementing version: 3.16.3	debian/changelog,version	skip	debian changelog metadata only					
+ec69dc129	2025-10-06	receiver position logic: fix for receivers near dateline	receiver.c	take	core decode/output path (critical)	y			follow-up?	
+14ef1565b	2025-10-06	prepare defines for api filtering by uuid	Makefile,readsb.h,track.c,track.h	take	core decode/output path (critical) + touches build (resolve to ADSBx side) | retag->take: build hunks reconciled by tip customization patch	y		tip-patch		
+e213c054d	2025-10-06	api: add &filter_uuid filter	README-json.md,api.c,api.h	take	core decode/output path (critical)	y				
+55b026baf	2025-10-07	only show planes with filter_uuid if received very recently by uuid	api.c	take	core decode/output path (critical)	y				
+b530dd30e	2025-10-14	comment on dropHalfUntil	net_io.c	take	core decode/output path (critical)	y				
+83cfa54e1	2025-10-17	adjust help for TCP client / server terminology	help.h	take	core code (non-critical) | help/README text only	n				
+9b80d7208	2025-10-17	update --help in github readme	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+af4d2d6a0	2025-10-17	incrementing version: 3.16.4	debian/changelog,version	skip	debian changelog metadata only					
+b53e58c1c	2025-10-20	stop counting invalid decodes from network for message rate	track.c	take	core decode/output path (critical)	y				
+3e095b1f1	2025-10-20	incrementing version: 3.16.5	debian/changelog,version	skip	debian changelog metadata only					
+7b78f77f0	2025-11-07	readme: fixup a link	README.md	skip	upstream docs/release tooling; ADSBx uses own CI/README					
+81b5d26ff	2025-11-10	ifile: exit promptly	sdr_ifile.c	take	SDR/hardware path; low test priority	n				
+079768749	2025-11-10	improve handling of synthetic clock / priority tasks	readsb.c,readsb.h,sdr_ifile.c	take	core code (non-critical) | synthetic clock/priority affects ifile replay determinism in tests	y	y			
+2d007af3c	2025-11-10	interactive: clean up seen column formatting a bit	interactive.c	take	core code (non-critical) | viewadsb/interactive terminal UI; not in automated suite	n				
+97ba5e692	2025-11-15	modify default USB buffer size to 128 kibibytes	help.h,readsb.c	take	core code (non-critical) | perf/memory; no observable output change	n				
+aa0bc6286	2025-11-15	SDR: unexpected size: avoid spamming the log too much	sdr_hackrf.c,sdr_plutosdr.c,sdr_rtlsdr.c,sdr_soapy.c	take	SDR/hardware path; low test priority	n				
+b985831f5	2025-11-15	incrementing version: 3.16.6	debian/changelog,version	skip	debian changelog metadata only					
+ba29158f0	2025-11-20	add option --json-separate-alt-ground	help.h,json_out.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+feee9307e	2025-12-14	make --net-beast-reduce-filter-dist more versatile	help.h,readsb.c,track.c	take	core decode/output path (critical)	y				
+6946bda89	2025-12-18	fix / make obvious: recentReceiverId overwrite logic	track.c	take	core decode/output path (critical)	y			follow-up?	
+cd7b07eb0	2025-12-18	set recentReceiverIds for aircraft without position	track.c	take	core decode/output path (critical)	y				
+f4f7648cb	2025-12-18	incrementing version: 3.16.7	debian/changelog,version	skip	debian changelog metadata only					
+25b1409e0	2025-12-20	less noise about trackremovestale taking a bit of time	track.c	take	core decode/output path (critical)	y				
+71b4390c7	2025-12-21	api: fix out of bounds read	api.c	take	core decode/output path (critical)	y			follow-up?	
+130c1439c	2025-12-21	net_io: fix null deref when with proxy strings	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+5141685f5	2025-12-21	net_io: fix asterix decoding fspec	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+91346cb5a	2025-12-21	net_io: fix readAsterix length validation failure	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+b05ebdafe	2025-12-21	incrementing version: 3.16.8	debian/changelog,version	skip	debian changelog metadata only					
+4295f84da	2025-12-22	ensure decodePlanefinder does not read past buffer	net_io.c	take	core decode/output path (critical)	y				
+26d7e0989	2025-12-22	api: filter_uuid: emit planes for a bit longer	api.c	take	core decode/output path (critical)	y				
+69d453825	2025-12-24	docker: use zstd compression	.github/workflows/docker.yaml	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+14881d22a	2025-12-31	add macro to print current line	util.h	take	core code (non-critical) | debug/log output only	n				
+f0e2ed96c	2025-12-31	add debug mechanism for garbage counter incrementing	net_io.c	take	core decode/output path (critical)	y				
+1e3ba484e	2025-12-31	beast: don't assume garbage for long messages	net_io.c	take	core decode/output path (critical)	y				
+d85add5d2	2026-01-01	fixup encapsulated UAT msg length check	net_io.c	take	core decode/output path (critical)	y				
+ba52568d6	2026-01-01	beast: default disabled debugging for sender not flushing whole messages	net_io.c,net_io.h	take	core decode/output path (critical)	y				
+800aca053	2026-01-10	Fix early return in decodeBDS44 pressure scoring	comm_b.c	take	core decode/output path (critical)	y			follow-up?	
+bd95a8a3d	2026-01-17	detect bad tuners and log / make available in json	5 files: json_out.c,readsb.c,readsb.h,sdr_rtlsdr.c,stats.c	take	core decode/output path (critical)	y				
+7824553d0	2026-01-17	incrementing version: 3.16.9	debian/changelog,version	skip	debian changelog metadata only					
+5831f9109	2026-02-03	change default autogain parameters	README.md,readsb.c	take	core code (non-critical) | SDR autogain tuning; not unit-testable, validate on SDR build if used	n				
+a88e53b99	2026-02-28	fix up tat / oat missing from traces	json_out.c,track.c	take	core decode/output path (critical)	y			follow-up?	
+f31032a45	2026-02-28	incrementing version: 3.16.10	debian/changelog,version	skip	debian changelog metadata only					
+7d341c6be	2026-02-28	Fix addrtype_t out of bounds	readsb.h	take	core code (non-critical) | addrtype_t OOB fix; aircraft type output correctness	y			follow-up?	
+7daf43646	2026-04-04	ingest: limit position rate	5 files: net_io.c,net_io.h,readsb.c,readsb.h,track.c	take	core decode/output path (critical)	y				
+c2af85460	2026-04-04	docker: add with_uuids build	Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+9f7071c89	2026-04-04	non transponder: lower priority	mode_s.c,readsb.h,toString.h,track.c	take	core decode/output path (critical)	y				
+9a9da7a14	2026-04-05	threadpool: add ifdef dependent debug prints	threadpool.c	take	core code (non-critical) | debug/log output only	n				
+eb635963c	2026-04-05	threadpool: add busy loop counting	threadpool.c	take	core code (non-critical) | debug/log output only	n				
+ba2fae14f	2026-04-05	threadpool: improve variable naming	threadpool.c	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+0dfa2aafa	2026-04-06	threadpool: use fetch_sub instead of compare exchange	threadpool.c	take	core code (non-critical) | perf/memory; no observable output change	n				
+542534546	2026-04-06	use madvise just in case for transparent hugepages	readsb.h	take	core code (non-critical) | perf/memory; no observable output change	n				
+15917d77a	2026-04-06	remove spurious unused declaration	readsb.h	take	core code (non-critical) | cleanup/refactor; no behavior change	n				
+4da537f6c	2026-04-06	incrementing version: 3.16.11	debian/changelog,version	skip	debian changelog metadata only					
+6ecea84fb	2026-04-08	Fix: wind assignment & duplicate check	track.c	take	core decode/output path (critical)	y			follow-up?	
+6d31c983c	2026-04-09	make hugepage handling better	aircraft.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+4d6c614d7	2026-04-11	Refactor: update hugepage definitions and usage in memory allocation	aircraft.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
+062afb4df	2026-04-19	Add ?find_squawk API option	README-json.md,api.c,api.h	take	core decode/output path (critical)	y				
+caf2c5a6d	2026-04-26	filter_squawk: support list as well	README-json.md,api.c,api.h	take	core decode/output path (critical)	y				
+d38b903bb	2026-05-01	receiver json: indicate if replay is being written	json_out.c	take	core decode/output path (critical)	y				
+b8f00f86f	2026-05-04	add cpr repitition exception	track.c	take	core decode/output path (critical)	y				
+307a8554f	2026-05-04	incrementing version: 3.16.12	debian/changelog,version	skip	debian changelog metadata only					
+433a61cf6	2026-05-04	incrementing version: 3.16.13	debian/changelog,version	skip	debian changelog metadata only					
+ecb9f4f5c	2026-05-04	cpr repitition: fix issue with uat	track.c	take	core decode/output path (critical)	y			follow-up?	
+b80c737b4	2026-05-04	incrementing version: 3.16.14	debian/changelog,version	skip	debian changelog metadata only					
+04e88d9d5	2026-05-11	new option: --net-json-port-wind-triggered	help.h,readsb.c,readsb.h,track.c	take	core decode/output path (critical)	y				
+226ce8547	2026-05-12	wind triggered tcp json output: only emit when position is fresher than 2.5s	help.h,track.c	take	core decode/output path (critical)	y				
+05df27db9	2026-05-12	incrementing version: 3.16.15	debian/changelog,version	skip	debian changelog metadata only					
+b65ee05ff	2026-05-12	better git describe version in version strings	Makefile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+b499ecbd1	2026-05-13	remove unused variable	net_io.c	take	core decode/output path (critical)	y				
+0adaebb8d	2026-05-27	Add optional SBS RSSI field (field 23) using --devel=sbs_rssi	net_io.c,readsb.c,readsb.h,util.c	take	core decode/output path (critical)	y				
+e492f81c7	2026-06-07	Fix RSSI SBS output: buffer size and log10 clamp	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+b2e7605da	2026-06-07	Cater for writing files to a dated sub-folder	readsb.c,readsb.h,util.c	take	core code (non-critical) | dated sub-folder output path feature	y				
+8c63e84e4	2026-06-07	Updates to build with SBS_RSSI=yes	Dockerfile	take	build/CI only; preserve ADSBx label+workflows | retag->take: build hunks reconciled by tip customization patch			tip-patch		
+cc0d09975	2026-06-07	Fix sign-extension in Asterix message length parsing	net_io.c	take	core decode/output path (critical)	y			follow-up?	
+0bfd0473d	2026-06-08	Add --devel=sbs_extra_fields: append RSSI and aircraft category to SBS output	net_io.c,readsb.c,readsb.h	take	core decode/output path (critical)	y				
