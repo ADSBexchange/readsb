@@ -8,8 +8,8 @@ Last updated: 2026-06-24
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 18 |
-| Integration test functions | 110 |
+| Integration test files | 19 |
+| Integration test functions | 113 |
 
 ## Unit Tests
 
@@ -106,6 +106,7 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_clients_json.py` | TestClientsJson | 3 | clients.json (--net-ingest): {now,format[],clients[]}, format header contract, positional client-row arity (leaderboard ingest contract) |
 | `test_receiver_json.py` | TestReceiverJsonFields | 3 | receiver.json capability fields: version/refresh/history, binCraft/zstd/json_trace_interval, globeIndexGrid + globeIndexSpecialTiles |
 | `test_aircraft_json_fields.py` | TestAircraftJsonFields | 4 | aircraft.json top-level shape + per-aircraft object field/type contract (hex/flight/lat/lon/alt_baro/gs/track/seen/rssi/squawk/type, mlat/tisb arrays) |
+| `test_globe_history.py` | TestGlobeHistory | 3 | --write-globe-history dated YYYY/MM/DD layout (traces/ + acas/), internal_state/ blobs (heatmap.bin is day-rollover-gated, not asserted) |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
