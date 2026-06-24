@@ -1,6 +1,6 @@
 # readsb Test Coverage Reference
 
-Last updated: 2026-02-27
+Last updated: 2026-06-24
 
 ## Summary
 
@@ -8,8 +8,8 @@ Last updated: 2026-02-27
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 13 |
-| Integration test functions | 90 |
+| Integration test files | 14 |
+| Integration test functions | 96 |
 
 ## Unit Tests
 
@@ -101,6 +101,7 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_uav.py` | TestUav, TestUavApi, TestUavRejected, TestUavFilterApi | 11 | UAV/drone support, API queries, --enable-uav gate, filter_uav with db |
 | `test_net_connector.py` | TestBeastDF17Input, TestMultiSource | 5 | Beast DF17 position, multi-source (SBS+Beast) |
 | `test_stats_and_history.py` | TestReceiverJson, TestJsonFileWriting | 9 | receiver.json, aircraft.json, file updates, message counts |
+| `test_globe_index.py` | TestGlobeIndex, TestGlobeIndexDisabled | 6 | globe_*.json tiles (gzip), tile schema + bbox placement, receiver.json globeIndexGrid/SpecialTiles; negative control without the flag |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
