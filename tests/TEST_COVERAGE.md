@@ -8,8 +8,8 @@ Last updated: 2026-06-24
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 21 |
-| Integration test functions | 119 |
+| Integration test files | 22 |
+| Integration test functions | 124 |
 
 ## Unit Tests
 
@@ -109,6 +109,7 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_globe_history.py` | TestGlobeHistory | 3 | --write-globe-history dated YYYY/MM/DD layout (traces/ + acas/), internal_state/ blobs (heatmap.bin is day-rollover-gated, not asserted) |
 | `test_state_persistence.py` | TestStatePersistence | 3 | --write-state round-trip: state blobs on exit, aircraft + position restored after restart (guards re-api state drift) |
 | `test_json_out_stream.py` | TestJsonOutStream | 3 | --net-json-port streaming record (EKS→Vector→MSK): JSON object per position, hex/lat/lon/alt_baro + streaming fields |
+| `test_db_enrichment.py` | TestDbEnrichment | 5 | --db-file enrichment (r/t/dbFlags + desc via --db-file-lt), military bit (bit0), civil non-mil, hardcoded mil address range. Note: rows need trailing ';' + db >1000 bytes |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
