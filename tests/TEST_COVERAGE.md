@@ -8,8 +8,8 @@ Last updated: 2026-06-24
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 16 |
-| Integration test functions | 103 |
+| Integration test files | 18 |
+| Integration test functions | 110 |
 
 ## Unit Tests
 
@@ -104,6 +104,8 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_globe_index.py` | TestGlobeIndex, TestGlobeIndexDisabled | 6 | globe_*.json tiles (gzip), tile schema + bbox placement, receiver.json globeIndexGrid/SpecialTiles; negative control without the flag |
 | `test_trace_files.py` | TestTraceFiles | 4 | trace_recent/full_<icao>.json (gzip) under traces/<last2hex>/, root {icao,timestamp,trace[]}, fixed 14-element trace-point array contract |
 | `test_clients_json.py` | TestClientsJson | 3 | clients.json (--net-ingest): {now,format[],clients[]}, format header contract, positional client-row arity (leaderboard ingest contract) |
+| `test_receiver_json.py` | TestReceiverJsonFields | 3 | receiver.json capability fields: version/refresh/history, binCraft/zstd/json_trace_interval, globeIndexGrid + globeIndexSpecialTiles |
+| `test_aircraft_json_fields.py` | TestAircraftJsonFields | 4 | aircraft.json top-level shape + per-aircraft object field/type contract (hex/flight/lat/lon/alt_baro/gs/track/seen/rssi/squawk/type, mlat/tisb arrays) |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
