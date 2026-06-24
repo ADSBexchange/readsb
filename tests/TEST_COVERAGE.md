@@ -8,8 +8,8 @@ Last updated: 2026-06-24
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 14 |
-| Integration test functions | 96 |
+| Integration test files | 15 |
+| Integration test functions | 100 |
 
 ## Unit Tests
 
@@ -102,6 +102,7 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_net_connector.py` | TestBeastDF17Input, TestMultiSource | 5 | Beast DF17 position, multi-source (SBS+Beast) |
 | `test_stats_and_history.py` | TestReceiverJson, TestJsonFileWriting | 9 | receiver.json, aircraft.json, file updates, message counts |
 | `test_globe_index.py` | TestGlobeIndex, TestGlobeIndexDisabled | 6 | globe_*.json tiles (gzip), tile schema + bbox placement, receiver.json globeIndexGrid/SpecialTiles; negative control without the flag |
+| `test_trace_files.py` | TestTraceFiles | 4 | trace_recent/full_<icao>.json (gzip) under traces/<last2hex>/, root {icao,timestamp,trace[]}, fixed 14-element trace-point array contract |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
