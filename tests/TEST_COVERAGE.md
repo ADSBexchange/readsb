@@ -1,6 +1,6 @@
 # readsb Test Coverage Reference
 
-Last updated: 2026-02-27
+Last updated: 2026-06-24
 
 ## Summary
 
@@ -8,8 +8,8 @@ Last updated: 2026-02-27
 |----------|-------|
 | Unit test binaries | 22 |
 | Unit test functions | ~215 |
-| Integration test files | 13 |
-| Integration test functions | 90 |
+| Integration test files | 24 |
+| Integration test functions | 130 |
 
 ## Unit Tests
 
@@ -101,6 +101,17 @@ Integration tests use Python 3 unittest, spawning a real readsb process per test
 | `test_uav.py` | TestUav, TestUavApi, TestUavRejected, TestUavFilterApi | 11 | UAV/drone support, API queries, --enable-uav gate, filter_uav with db |
 | `test_net_connector.py` | TestBeastDF17Input, TestMultiSource | 5 | Beast DF17 position, multi-source (SBS+Beast) |
 | `test_stats_and_history.py` | TestReceiverJson, TestJsonFileWriting | 9 | receiver.json, aircraft.json, file updates, message counts |
+| `test_globe_index.py` | TestGlobeIndex, TestGlobeIndexDisabled | 6 | globe_*.json tiles (gzip), tile schema + bbox placement, receiver.json globeIndexGrid/SpecialTiles; negative control without the flag |
+| `test_trace_files.py` | TestTraceFiles | 4 | trace_recent/full_<icao>.json (gzip) under traces/<last2hex>/, root {icao,timestamp,trace[]}, fixed 14-element trace-point array contract |
+| `test_clients_json.py` | TestClientsJson | 3 | clients.json (--net-ingest): {now,format[],clients[]}, format header contract, positional client-row arity (leaderboard ingest contract) |
+| `test_receiver_json.py` | TestReceiverJsonFields | 3 | receiver.json capability fields: version/refresh/history, binCraft/zstd/json_trace_interval, globeIndexGrid + globeIndexSpecialTiles |
+| `test_aircraft_json_fields.py` | TestAircraftJsonFields | 4 | aircraft.json top-level shape + per-aircraft object field/type contract (hex/flight/lat/lon/alt_baro/gs/track/seen/rssi/squawk/type, mlat/tisb arrays) |
+| `test_globe_history.py` | TestGlobeHistory | 3 | --write-globe-history dated YYYY/MM/DD layout (traces/ + acas/), internal_state/ blobs (heatmap.bin is day-rollover-gated, not asserted) |
+| `test_state_persistence.py` | TestStatePersistence | 3 | --write-state round-trip: state blobs on exit, aircraft + position restored after restart (guards re-api state drift) |
+| `test_json_out_stream.py` | TestJsonOutStream | 3 | --net-json-port streaming record (EKS→Vector→MSK): JSON object per position, hex/lat/lon/alt_baro + streaming fields |
+| `test_db_enrichment.py` | TestDbEnrichment | 5 | --db-file enrichment (r/t/dbFlags + desc via --db-file-lt), military bit (bit0), civil non-mil, hardcoded mil address range. Note: rows need trailing ';' + db >1000 bytes |
+| `test_output_files_extra.py` | TestExtraOutputFiles | 4 | --write-json-gzip (aircraft.json.gz valid + matches plain) and --write-prom (readsb_ Prometheus metrics, valid format; node_exporter contract) |
+| `test_trace_hist_only.py` | TestTraceHistOnly | 2 | --json-trace-hist-only 3 suppresses /run trace files (hrtraces/globe-history mode); aircraft still tracked |
 
 Run all integration tests: `make inttest`
 Run everything: `make fulltest`
