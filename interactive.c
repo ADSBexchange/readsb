@@ -123,7 +123,7 @@ void interactiveShowData(void) {
     static int64_t next_clear;
     int64_t now = mstime();
     char progress;
-    char spinner[4] = "|/-\\";
+    char spinner[5] = "|/-\\";
 
     // Refresh screen every (MODES_INTERACTIVE_REFRESH_TIME) miliseconde
     if (now < next_update)
